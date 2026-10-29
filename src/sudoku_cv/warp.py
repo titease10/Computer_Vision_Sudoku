@@ -32,17 +32,19 @@ def _find_quad(gray: np.ndarray, min_area_ratio: float) -> Optional[np.ndarray]:
     thresh = cv2.adaptiveThreshold(
         blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2
     )
-    # Referme les petites coupures des traits de la grille
-    thresh = cv2.dilate(thresh, np.ones((3, 3), np.uint8))
-    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     min_area = min_area_ratio * gray.shape[0] * gray.shape[1]
-    for cnt in sorted(contours, key=cv2.contourArea, reverse=True)[:10]:
-        if cv2.contourArea(cnt) < min_area:
-            break
-        peri = cv2.arcLength(cnt, True)
-        approx = cv2.approxPolyDP(cnt, 0.02 * peri, True)
-        if len(approx) == 4 and cv2.isContourConvex(approx):
-            return approx.reshape(4, 2).astype(np.float32)
+    # 1er essai avec dilatation : referme les petites coupures des traits de la grille.
+    # 2e essai sans : sur une petite image, la dilatation peut souder la grille au bord de la
+    # page (ombre de la reliure) et le contour n'est plus un quadrilatère.
+    for mask in (cv2.dilate(thresh, np.ones((3, 3), np.uint8)), thresh):
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        for cnt in sorted(contours, key=cv2.contourArea, reverse=True)[:10]:
+            if cv2.contourArea(cnt) < min_area:
+                break
+            peri = cv2.arcLength(cnt, True)
+            approx = cv2.approxPolyDP(cnt, 0.02 * peri, True)
+            if len(approx) == 4 and cv2.isContourConvex(approx):
+                return approx.reshape(4, 2).astype(np.float32)
     return None
 
 

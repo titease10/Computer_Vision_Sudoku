@@ -207,3 +207,40 @@ garder aussi des photos plus larges (rg1990, les nôtres).
   suffisent : les erreurs du classifieur ont presque toujours une confiance basse.
 - Échec restant : w_image17, grille coupée par le bord de la photo. Le pipeline répond
   « insoluble » au lieu d'une solution fausse.
+
+## Test sur une photo personnelle : double page de magazine (échec puis correction)
+
+Photo : capture d'écran 585×398 d'un magazine ouvert, **deux grilles** (à gauche une grille
+vierge, à droite une grille remplie au crayon avec des notes dans les cases).
+
+**Diagnostic, étape par étape :**
+1. Détection YOLO : correcte, les **deux** grilles sont trouvées (confiance 0,93 chacune).
+2. Coins : **faux**. Dans la bbox de gauche, le seuillage puis la dilatation **soudent la
+   grille au bord de la page** (ombre de la reliure à droite, coin de la page en bas à
+   gauche). Le contour a alors 6 sommets, il est rejeté, et on retombe sur les coins de la
+   bbox, trop imprécis.
+3. Conséquence : la grille redressée est décalée d'environ une colonne, tous les chiffres
+   sont lus dans la mauvaise case, et la grille est déclarée insoluble.
+
+**Corrections :**
+- `_find_quad` : si aucun quadrilatère n'est trouvé avec la dilatation, 2ᵉ essai **sans
+  dilatation**. Le contour de la grille redevient un quadrilatère propre. La dilatation reste
+  le 1er essai, donc les photos qui marchaient déjà ne changent pas.
+- Pipeline : `GridDetector.detect_all` renvoie **toutes** les grilles détectées. Le pipeline
+  les essaie de la plus sûre à la moins sûre et garde la **première résolue**. Avant, seule
+  la plus sûre était essayée.
+
+**Résultat :** la grille de gauche est lue sans erreur (81/81 cases vérifiées à l'œil) et
+résolue. Pas de régression sur le test : 97,6 % des sudokus résolus, coins 95,1 %, chiffres
+identiques au centième près.
+
+**Pistes écartées :**
+- Approcher l'enveloppe convexe du contour soudé par 4 sommets : on obtient bien un
+  quadrilatère, mais il englobe le coin de la page. Il est donc faux, et rien ne permettait
+  de s'en rendre compte.
+- Utiliser directement la bbox YOLO : c'est exactement le repli qui a échoué (rectangle droit
+  alors que la grille est en perspective).
+
+**Leçon :** ce cas n'existait pas dans le jeu de test (une seule grille par photo, photos
+plus grandes). Les photos personnelles révèlent des situations que le jeu public ne couvre
+pas.

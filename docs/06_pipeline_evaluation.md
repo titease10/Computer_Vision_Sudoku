@@ -98,6 +98,12 @@ une partie des cases est hors de l'image : 17 cases fausses, la plupart des chif
 comme « vide ». La réparation abandonne (trop d'erreurs) et le pipeline répond
 « insoluble » au lieu de donner une solution fausse : c'est le comportement voulu.
 
+## Photo à plusieurs grilles
+
+Une double page de magazine contient souvent 2 grilles. Le pipeline récupère toutes les
+détections YOLO, les essaie de la plus sûre à la moins sûre et garde la première résolue
+(voir le journal : test sur une photo personnelle).
+
 ## Limites et suite
 
 - 41 photos de test et 27 grilles distinctes : chaque photo pèse 2,4 points de pourcentage.
