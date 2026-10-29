@@ -191,3 +191,19 @@ garder aussi des photos plus larges (rg1990, les nôtres).
 - Test : mAP50 = 0,995, mAP50-95 = 0,921, rappel 100 %.
 - Coins : YOLO + OpenCV réussit **95,1 %** (contre 90,2 % pour OpenCV seul), bbox seule 9,8 %.
 - Échecs restants : page courbée (rg_18), grille coupée par le bord (w_image17).
+
+## Étape 7-8 — Pipeline complet et évaluation de bout en bout
+
+- Première mesure, lecture brute : 85,4 % des sudokus résolus (35/41).
+- **Problème 1 : grilles tournées.** 3 photos de journal tournées de 90° ou à l'envers :
+  environ 30 cases fausses chacune. Les coins sont ordonnés selon la photo, pas selon la
+  grille. Solution : classer dans les 4 orientations et garder la plus confiante (confiance
+  calculée sur les cases chiffres seulement). On passe à 92,7 %.
+- **Problème 2 : une case fausse suffit à tout casser** (rg_18 : bord de grille lu « 1 » ;
+  w_image46 : 1 lu « 4 »). Solution : réparation par les règles (2ᵉ choix des cases les moins
+  sûres jusqu'à obtenir une solution unique). On passe à **97,6 % (40/41), 0 solution fausse**.
+- Piste écartée : réparer en essayant toutes les cases. Trop de combinaisons, et plus de
+  risque de tomber par hasard sur une mauvaise grille valide. Les 8 cases les moins sûres
+  suffisent : les erreurs du classifieur ont presque toujours une confiance basse.
+- Échec restant : w_image17, grille coupée par le bord de la photo. Le pipeline répond
+  « insoluble » au lieu d'une solution fausse.
