@@ -46,6 +46,7 @@ class PipelineResult:
     flat: Optional[np.ndarray] = None
     points: Optional[np.ndarray] = None  # 10x10x2, dans l'orientation de `grid`
     timings: dict[str, float] = field(default_factory=dict)
+    n_grids: int = 0  # nombre de grilles détectées par YOLO sur la photo
 
 
 def _grid_score(probs: np.ndarray) -> float:
@@ -127,23 +128,34 @@ class SudokuPipeline:
         self.repair = repair
 
     def run(self, image: np.ndarray) -> PipelineResult:
-        res = PipelineResult(status="no_grid")
+        """Lit et résout la grille de la photo.
+
+        S'il y a plusieurs grilles (double page de magazine), on les essaie de la plus sûre à
+        la moins sûre et on garde la première résolue ; sinon le résultat de la plus sûre.
+        """
         t0 = time.perf_counter()
+        dets = self.detector.detect_all(image) if self.detector is not None else []
+        detect_time = time.perf_counter() - t0
+        results = []
+        for bbox, conf in dets or [(None, 0.0)]:  # aucune bbox : OpenCV sur toute l'image
+            res = self._run_grid(image, bbox, conf)
+            res.n_grids = len(dets)
+            res.timings["detect"] = detect_time
+            results.append(res)
+            if res.status == "solved":
+                break
+        best = next((r for r in results if r.status == "solved"),
+                    next((r for r in results if r.status != "no_grid"), results[0]))
+        best.timings["total"] = time.perf_counter() - t0
+        return best
 
-        bbox = None
-        if self.detector is not None:
-            det = self.detector.detect(image)
-            if det is not None:
-                bbox, res.bbox_conf = det
-                res.bbox = bbox
+    def _run_grid(self, image: np.ndarray, bbox: Optional[np.ndarray], conf: float) -> PipelineResult:
+        res = PipelineResult(status="no_grid", bbox=bbox, bbox_conf=conf)
         t1 = time.perf_counter()
-        res.timings["detect"] = t1 - t0
-
         cells = read_cells(image, bbox=bbox)
         t2 = time.perf_counter()
         res.timings["warp"] = t2 - t1
         if cells is None:
-            res.timings["total"] = t2 - t0
             return res
 
         # Lecture dans chaque orientation, on garde la plus vraisemblable
@@ -172,7 +184,6 @@ class SudokuPipeline:
             res.solution = solve(res.grid)
         res.status = "solved" if res.solution is not None else "unsolvable"
         res.timings["solve"] = time.perf_counter() - t3
-        res.timings["total"] = time.perf_counter() - t0
         return res
 
 

@@ -95,7 +95,8 @@ def main() -> None:
     t = res.timings
     st.caption(f"Temps : détection {t['detect']*1000:.0f} ms · redressement {t['warp']*1000:.0f} ms · "
                f"lecture {t['classify']*1000:.0f} ms · total {t['total']*1000:.0f} ms"
-               + (f" · confiance bbox {res.bbox_conf:.2f}" if res.bbox is not None else " · sans bbox (OpenCV)"))
+               + (f" · confiance bbox {res.bbox_conf:.2f}" if res.bbox is not None else " · sans bbox (OpenCV)")
+               + (f" · {res.n_grids} grilles détectées, celle-ci est la première résolue" if res.n_grids > 1 else ""))
 
     col1, col2 = st.columns(2)
     col1.subheader("1. Grille trouvée")

@@ -14,11 +14,15 @@ class GridDetector:
         self.device = device
         self.conf = conf
 
-    def detect(self, image: np.ndarray, imgsz: int = 640) -> Optional[tuple[np.ndarray, float]]:
-        """Image BGR -> (bbox [x1, y1, x2, y2] en pixels, confiance) de la grille la plus sûre,
-        ou None si aucune grille n'est détectée."""
+    def detect_all(self, image: np.ndarray, imgsz: int = 640) -> list[tuple[np.ndarray, float]]:
+        """Image BGR -> toutes les grilles [(bbox [x1, y1, x2, y2] en pixels, confiance)],
+        de la plus sûre à la moins sûre (une double page de magazine en contient deux)."""
         result = self.model.predict(image, imgsz=imgsz, conf=self.conf, device=self.device, verbose=False)[0]
-        if len(result.boxes) == 0:
-            return None
-        best = int(result.boxes.conf.argmax())
-        return result.boxes.xyxy[best].cpu().numpy(), float(result.boxes.conf[best])
+        boxes = result.boxes.xyxy.cpu().numpy()
+        confs = result.boxes.conf.cpu().numpy()
+        return [(boxes[k], float(confs[k])) for k in np.argsort(-confs)]
+
+    def detect(self, image: np.ndarray, imgsz: int = 640) -> Optional[tuple[np.ndarray, float]]:
+        """Image BGR -> (bbox, confiance) de la grille la plus sûre, ou None si aucune grille."""
+        dets = self.detect_all(image, imgsz)
+        return dets[0] if dets else None
