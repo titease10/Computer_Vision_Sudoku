@@ -5,3 +5,4 @@ streamlit>=1.35
 numpy
 pillow
 pytest
+markdown  # export PDF de la note de cadrage

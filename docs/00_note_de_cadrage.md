@@ -4,9 +4,9 @@
 
 | Membre | Rôle |
 |---|---|
-| Vincent [NOM] | **Modèles et données** : constitution des datasets, entraînement du détecteur de grille et du classifieur de cases (YOLO), suivi des expériences dans MLflow |
-| Titien [NOM] | **Pipeline et API** : redressement OpenCV, solveur, API FastAPI, évaluation de bout en bout, tests |
-| Aymeric [NOM] | **Application et qualité** : interface web, parcours utilisateur, tests sur photos réelles, documentation |
+| Vincent | **Modèles et données** : constitution des datasets, entraînement du détecteur de grille et du classifieur de cases (YOLO), suivi des expériences dans MLflow |
+| Titien | **Pipeline et API** : redressement OpenCV, solveur, API FastAPI, évaluation de bout en bout, tests |
+| Aymeric | **Application et qualité** : interface web, parcours utilisateur, tests sur photos réelles, documentation |
 
 ## 2. Le sujet choisi
 
@@ -25,6 +25,7 @@ sans ambiguïté : le sudoku est résolu ou ne l'est pas. Des données publiques
 FastAPI** ; les modèles sont versionnés dans le **Model Registry MLflow**.
 
 **Parcours utilisateur :**
+
 1. L'utilisateur ouvre l'application et prend en photo une grille de journal ou de livre
    (ou importe une image).
 2. Il voit la grille repérée sur sa photo (cadre et quadrillage superposés).
@@ -35,6 +36,7 @@ FastAPI** ; les modèles sont versionnés dans le **Model Registry MLflow**.
    lieu de donner une solution fausse.
 
 **Fonctionnement :**
+
 - **Entrée :** une photo (JPEG ou PNG).
 - **Modèle 1, détecteur YOLO :** il reçoit la photo et renvoie le cadre de la ou des grilles,
   avec une confiance.
@@ -46,11 +48,12 @@ FastAPI** ; les modèles sont versionnés dans le **Model Registry MLflow**.
   sûres, puis la résout.
 - **Communication application ↔ API :** l'application envoie la photo à l'API en HTTP
   (`POST /solve`, multipart). L'API renvoie un JSON qui contient :
-  - la grille lue et la confiance de chaque case ;
-  - la solution ;
-  - la position des cases sur la photo (pour le dessin de la solution).
 
-  Après une correction manuelle, l'application rappelle l'API (`POST /solve-grid`) avec la
+    - la grille lue et la confiance de chaque case ;
+    - la solution ;
+    - la position des cases sur la photo (pour le dessin de la solution).
+
+    Après une correction manuelle, l'application rappelle l'API (`POST /solve-grid`) avec la
   grille seulement, sans refaire la lecture de la photo.
 
 **Objectif mesuré :** au moins 90 % des sudokus résolus correctement sur des photos jamais
