@@ -114,3 +114,25 @@ comme « vide ». La réparation abandonne (trop d'erreurs) et le pipeline répo
 .venv/Scripts/python scripts/evaluate.py              # les 4 configurations
 .venv/Scripts/python scripts/evaluate.py --configs full --renders   # + photos annotées dans runs/eval/
 ```
+
+## Model Registry MLflow
+
+Les deux modèles retenus sont enregistrés dans le **Model Registry** de MLflow
+(`scripts/register_models.py`), avec l'alias **`champion`** :
+
+| Modèle du registry | Version | Run d'origine | Rôle |
+|---|---|---|---|
+| `sudoku-grid-detector` | v1 | `grid_v1` | bbox de la grille |
+| `sudoku-digit-classifier` | v1 | `cells_v2` | contenu des cases |
+
+**Pourquoi :** l'application et l'évaluation chargent `models:/<nom>@champion`, sans chemin
+de fichier ni id de run en dur (`SudokuPipeline.from_registry(...)`). Pour mettre un
+meilleur modèle en production, on enregistre une nouvelle version et on déplace l'alias :
+le code ne change pas, et on garde l'historique des versions.
+
+**Détail technique :** les poids Ultralytics (`.pt`) ne sont pas un format de modèle que
+MLflow connaît. On enregistre donc le dossier `weights/` du run comme version, et on
+télécharge `best.pt` au chargement.
+
+**Vérification :** `evaluate.py --configs full --from-registry` redonne 97,6 % des sudokus
+résolus, exactement comme avec les chemins locaux.

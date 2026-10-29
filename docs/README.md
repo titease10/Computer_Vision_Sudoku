@@ -59,6 +59,7 @@ scripts/
   build_grid_dataset.py    construction du dataset de détection de grille
   train_grid.py            entraînement YOLO detect + MLflow (--resume pour reprendre)
   evaluate.py              évaluation de bout en bout + MLflow (pipeline_eval)
+  register_models.py       enregistrement des modèles dans le Model Registry (alias champion)
 labels/rg1990_grids.json   vérité terrain des photos de test
 tests/                     tests unitaires (pytest)
 ```
@@ -72,5 +73,6 @@ tests/                     tests unitaires (pytest)
 .venv/Scripts/python scripts/train_cells.py --epochs 15 --name cells_v1
 .venv/Scripts/python scripts/train_grid.py --epochs 60
 .venv/Scripts/python scripts/evaluate.py --renders
+.venv/Scripts/python scripts/register_models.py                 # alias champion dans le registry
 .venv/Scripts/mlflow ui --backend-store-uri sqlite:///mlflow.db  # http://127.0.0.1:5000
 ```
