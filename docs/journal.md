@@ -179,3 +179,15 @@ garder aussi des photos plus larges (rg1990, les nôtres).
   rattache la suite au **même run MLflow**, ce qui garde des courbes continues.
 - Leçon : un long entraînement CPU doit pouvoir être repris. Ultralytics sauvegarde
   `last.pt` à chaque époque, ce qui le permet sans rien perdre.
+- Effet de bord découvert à la reprise : l'intégration MLflow d'Ultralytics refuse d'écrire
+  dans un run dont les paramètres ont changé (`model` : `yolo11n.pt` devient `last.pt`) et
+  affiche « Not tracking this run ». Les époques 34 à 60 n'étaient donc pas dans MLflow.
+  Correction : `backfill_epoch_metrics()` recopie les époques manquantes depuis `results.csv`
+  (mêmes noms, step = époque - 1), et les poids et courbes sont ajoutés au run à la main.
+  Les 60 époques sont maintenant visibles dans MLflow.
+
+## Étape 5 (détection) — résultats `grid_v1`
+
+- Test : mAP50 = 0,995, mAP50-95 = 0,921, rappel 100 %.
+- Coins : YOLO + OpenCV réussit **95,1 %** (contre 90,2 % pour OpenCV seul), bbox seule 9,8 %.
+- Échecs restants : page courbée (rg_18), grille coupée par le bord (w_image17).

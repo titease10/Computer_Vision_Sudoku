@@ -73,3 +73,48 @@ correctes (la photo 17, dont le coin est faux, est exclue).
   cases **surlignées** (bandes bleues ou vertes).
 - **Peu de grilles distinctes** (77 + 20) : le test (27 grilles) donne une mesure correcte
   pour la détection, mais il faudra des photos personnelles pour valider en conditions réelles.
+
+## Résultats de `grid_v1` (yolo11n, 60 époques, CPU)
+
+Run MLflow `grid_v1` (expérience `grid_detection`). L'entraînement a été interrompu à
+l'époque 34, puis repris (voir `journal.md`). Durée totale ≈ 30 min sur CPU.
+
+![Courbes d'entraînement](img/grid_v1_courbes.png)
+
+### Détection (mAP Ultralytics)
+
+| Ensemble | Précision | Rappel | mAP50 | mAP50-95 |
+|---|---|---|---|---|
+| val (29 images) | 0,985 | 1,00 | 0,995 | 0,913 |
+| **test (41 images)** | **0,997** | **1,00** | **0,995** | **0,921** |
+
+La grille est trouvée sur **toutes** les images de test. Le mAP50-95, plus exigeant sur
+l'ajustement du cadre, progresse peu après l'époque 38 (0,910) : 60 époques suffisent.
+
+### Ce qui compte vraiment : les 4 coins
+
+Une image est réussie si ses 4 coins sont à moins de 3 % du côté de la grille.
+
+| Méthode | Réussite | Erreur médiane | wichtounet (30) | rg1990 (11) |
+|---|---|---|---|---|
+| A. OpenCV seul (référence) | 90,2 % | 1,18 % | 90,0 % | 90,9 % |
+| **B. YOLO + OpenCV** | **95,1 %** | **1,12 %** | **96,7 %** | 90,9 % |
+| C. YOLO seul (coins de la bbox) | 9,8 % | 4,80 % | 13,3 % | 0 % |
+
+**Interprétation :**
+- **B est la meilleure méthode** : YOLO isole la grille, ce qui règle 2 des 4 échecs
+  d'OpenCV seul : la grille collée à la grille des solutions (w_image1077) et la page à
+  l'envers (w_image1083). En restreignant la recherche de contour à la bbox, la grille voisine
+  ne peut plus être fusionnée.
+- **C ne suffit pas** : une bbox est un rectangle droit, alors que la grille photographiée est
+  un quadrilatère quelconque (perspective). C'est pourquoi on garde OpenCV pour les coins ;
+  la bbox seule ne sert que de dernier repli.
+- **2 échecs restants pour B :**
+  - `rg_18` (4,9 %) : page **courbée**. Les bords ne sont pas droits, donc aucun quadrilatère
+    ne colle parfaitement. Le redressement par suivi des traits (`dewarp_grid`) doit compenser.
+  - `w_image17` (4,0 %) : grille **coupée par le bord de la photo**. OpenCV seul ne trouvait
+    rien (aucun contour fermé) ; avec YOLO on obtient des coins approximatifs, juste au-dessus
+    du seuil. Une photo où la grille sort du cadre ne peut de toute façon pas être lue en entier.
+
+**Conclusion :** objectif atteint pour la détection (mAP50 > 0,95). Le pipeline utilisera
+YOLO → OpenCV dans la bbox → repli sur les coins de la bbox.
