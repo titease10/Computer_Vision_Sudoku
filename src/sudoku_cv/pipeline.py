@@ -93,8 +93,22 @@ def repair_grid(
     return None
 
 
+def registry_weights(model: str, tracking_uri: str, alias: str = "champion") -> Path:
+    """Télécharge (cache local MLflow) les poids d'un modèle du registry et renvoie best.pt."""
+    import mlflow
+
+    mlflow.set_tracking_uri(tracking_uri)
+    return Path(mlflow.artifacts.download_artifacts(f"models:/{model}@{alias}")) / "best.pt"
+
+
 class SudokuPipeline:
     """Photo -> solution, avec le détecteur YOLO et le classifieur de cases YOLO-cls."""
+
+    @classmethod
+    def from_registry(cls, tracking_uri: str, alias: str = "champion", **kwargs) -> "SudokuPipeline":
+        """Charge les deux modèles par leur alias dans le Model Registry MLflow."""
+        return cls(registry_weights("sudoku-grid-detector", tracking_uri, alias),
+                   registry_weights("sudoku-digit-classifier", tracking_uri, alias), **kwargs)
 
     def __init__(
         self,

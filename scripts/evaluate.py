@@ -15,6 +15,7 @@ Métrique principale : `solved_rate`, la part des photos dont la solution est ex
 Usage :
     python scripts/evaluate.py
     python scripts/evaluate.py --configs full --renders
+    python scripts/evaluate.py --configs full --from-registry   # modèles « champion » du registry
 """
 from __future__ import annotations
 
@@ -30,7 +31,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from sudoku_cv.pipeline import SudokuPipeline, render_solution  # noqa: E402
+from sudoku_cv.pipeline import SudokuPipeline, registry_weights, render_solution  # noqa: E402
 from sudoku_cv.solver import solve  # noqa: E402
 
 TRACKING_URI = f"sqlite:///{(ROOT / 'mlflow.db').as_posix()}"
@@ -99,6 +100,8 @@ def main() -> None:
     parser.add_argument("--grid-weights", type=Path, default=ROOT / "runs/grid/grid_v1/weights/best.pt")
     parser.add_argument("--digit-weights", type=Path, default=ROOT / "runs/cells/cells_v2/weights/best.pt")
     parser.add_argument("--configs", nargs="+", default=list(CONFIGS), choices=list(CONFIGS))
+    parser.add_argument("--from-registry", action="store_true",
+                        help="prend les modèles alias champion du Model Registry au lieu des chemins")
     parser.add_argument("--renders", action="store_true", help="enregistre les photos annotées (config full)")
     args = parser.parse_args()
 
@@ -112,6 +115,9 @@ def main() -> None:
                         "path": args.data / "images" / args.split / f"{name}.jpg"})
     assert all(s["solution"] for s in samples), "une grille vraie n'a pas de solution"
 
+    if args.from_registry:
+        args.grid_weights = registry_weights("sudoku-grid-detector", TRACKING_URI)
+        args.digit_weights = registry_weights("sudoku-digit-classifier", TRACKING_URI)
     mlflow.set_tracking_uri(TRACKING_URI)
     mlflow.set_experiment(EXPERIMENT)
     out = ROOT / "runs/eval"
@@ -123,7 +129,7 @@ def main() -> None:
                               try_rotations=cfg["try_rotations"], repair=cfg["repair"])
         render_dir = out / f"renders_{name}" if args.renders and name == "full" else None
         with mlflow.start_run(run_name=name):
-            mlflow.log_params({**cfg, "split": args.split, "grid_weights": args.grid_weights.as_posix(),
+            mlflow.log_params({**cfg, "split": args.split, "from_registry": args.from_registry, "grid_weights": args.grid_weights.as_posix(),
                                "digit_weights": args.digit_weights.as_posix()})
             metrics, rows = evaluate(pipe, samples, render_dir)
             mlflow.log_metrics(metrics)
