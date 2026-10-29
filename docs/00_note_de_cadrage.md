@@ -4,14 +4,16 @@
 
 | Membre | Rôle |
 |---|---|
-| [Prénom NOM] | **Modèles et données** : constitution des datasets, entraînement du détecteur de grille et du classifieur de cases (YOLO), suivi des expériences dans MLflow |
-| [Prénom NOM] | **Pipeline et API** : redressement OpenCV, solveur, API FastAPI, évaluation de bout en bout, tests |
-| [Prénom NOM] | **Application et qualité** : interface web, parcours utilisateur, tests sur photos réelles, documentation |
+| Vincent [NOM] | **Modèles et données** : constitution des datasets, entraînement du détecteur de grille et du classifieur de cases (YOLO), suivi des expériences dans MLflow |
+| Titien [NOM] | **Pipeline et API** : redressement OpenCV, solveur, API FastAPI, évaluation de bout en bout, tests |
+| Aymeric [NOM] | **Application et qualité** : interface web, parcours utilisateur, tests sur photos réelles, documentation |
 
 ## 2. Le sujet choisi
 
-**Sujet [n° / intitulé] : résoudre un sudoku à partir d'une photo d'une grille papier.**
-Pourquoi : [raison du groupe]. Le sujet combine apprentissage profond (détection,
+**Sujet 3 : résoudre un sudoku à partir d'une photo d'une grille papier.**
+Pourquoi : c'est le sujet qui correspond le plus à un **cas concret** pour nous : un usage
+réel et quotidien (une grille de journal ou de livre, prise en photo au téléphone), avec un
+utilisateur final clairement identifié. Le sujet combine apprentissage profond (détection,
 classification) et vision classique (géométrie, redressement). Le résultat est vérifiable
 sans ambiguïté : le sudoku est résolu ou ne l'est pas. Des données publiques existent
 (environ 230 photos annotées), ce qui permet de mesurer la solution sur des photos jamais vues.
