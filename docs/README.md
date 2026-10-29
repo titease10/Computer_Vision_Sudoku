@@ -13,7 +13,8 @@ uniquement par vision par ordinateur, la résoudre et afficher la solution sur l
 | 3 | [03_redressement.md](03_redressement.md) | Localisation de la grille, redressement, pages courbées, découpage en cases |
 | 4 | [04_classifieur_chiffres.md](04_classifieur_chiffres.md) | Lecture des cases avec YOLO-cls, dataset synthétique, MLflow |
 | 5 | [05_detection_grille.md](05_detection_grille.md) | Détection de la grille avec YOLO detect : datasets, découpage, pièges, résultats |
-| 6 | [06_pipeline_evaluation.md](06_pipeline_evaluation.md) | Pipeline complet, orientation, réparation, évaluation de bout en bout |
+| 6 | [06_pipeline_evaluation.md](06_pipeline_evaluation.md) | Pipeline complet, orientation, réparation, évaluation de bout en bout, Model Registry |
+| 7 | [07_application.md](07_application.md) | Application Streamlit (photo ou caméra, grille modifiable) |
 
 ## Vue d'ensemble du pipeline
 
@@ -61,6 +62,7 @@ scripts/
   evaluate.py              évaluation de bout en bout + MLflow (pipeline_eval)
   register_models.py       enregistrement des modèles dans le Model Registry (alias champion)
 labels/rg1990_grids.json   vérité terrain des photos de test
+app/streamlit_app.py       application de démonstration
 tests/                     tests unitaires (pytest)
 ```
 
@@ -74,5 +76,6 @@ tests/                     tests unitaires (pytest)
 .venv/Scripts/python scripts/train_grid.py --epochs 60
 .venv/Scripts/python scripts/evaluate.py --renders
 .venv/Scripts/python scripts/register_models.py                 # alias champion dans le registry
+.venv/Scripts/streamlit run app/streamlit_app.py               # http://localhost:8501
 .venv/Scripts/mlflow ui --backend-store-uri sqlite:///mlflow.db  # http://127.0.0.1:5000
 ```
