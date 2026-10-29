@@ -137,3 +137,20 @@ intersections du redressement fin.
 Debug visuel : `scripts/extract_cells.py` écrit pour chaque photo le contour (rouge) et les
 intersections (vert) dans `data/debug/corners/`, la grille redressée dans
 `data/debug/warped/`.
+
+
+## Vérification des coins par les traits (`refine_corners`)
+
+Ajoutée après un échec sur une photo personnelle (grille rose sur bandeau rouge, grille
+voisine collée ; détails dans le journal). Le contour extérieur peut englober autre chose
+que la grille. On redresse donc grossièrement avec une marge et on retrouve les 10 traits
+de chaque direction :
+- s'ils tombent là où le contour place les bords, on **garde le contour**, plus précis ;
+- sinon, les coins deviennent les **intersections des traits extrêmes**.
+
+Pour choisir les 10 traits parmi les pics (bord de page, bandeau, grille voisine, barres de
+1 ou de 7), on combine trois critères : la régularité de l'espacement (courbe de degré 2,
+pour tolérer la perspective), une pénalité pour chaque pic sauté, et un bonus si les traits
+0, 3, 6, 9 (bords des blocs) sont plus épais.
+
+![Grille rose résolue](img/user_grille_rose.jpg)

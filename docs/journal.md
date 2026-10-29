@@ -244,3 +244,49 @@ identiques au centième près.
 **Leçon :** ce cas n'existait pas dans le jeu de test (une seule grille par photo, photos
 plus grandes). Les photos personnelles révèlent des situations que le jeu public ne couvre
 pas.
+
+## Test sur une photo personnelle : grille rose sur fond rouge (échec, puis correction en 4 essais)
+
+Photo : capture 446×481 d'un journal. Grille à **traits roses**, chiffres roses, entourée
+d'un **bandeau rouge** en haut, avec une **2ᵉ grille collée** à droite. Forte perspective
+(la grille est plus étroite en haut).
+
+**Diagnostic :**
+1. YOLO trouve la grille (0,93).
+2. Le contour extérieur englobe le bandeau rouge et un morceau de la grille voisine : les
+   coins sont faux, une colonne déborde.
+3. Le suivi des traits ne peut pas compenser un décalage aussi grand : le « 1 » de la ligne 4
+   est lu en colonne 8 au lieu de 9, et le 7 de la ligne 5 n'est pas lu.
+4. **Plus grave : la réparation a « inventé » une solution fausse.** La grille lue avait
+   plusieurs solutions ; en ajoutant un 1 dans une case vide (probabilité 18 %), elle est
+   tombée sur une grille à solution unique, mais fausse. Le pipeline affichait une solution
+   crédible et fausse. Un seuil sur la probabilité ne suffit pas : le 1 inventé (18 %) a
+   presque la même probabilité qu'un vrai chiffre manqué (24 %). La vraie correction
+   doit se faire sur la géométrie.
+
+**Correction : `refine_corners` (coins vérifiés par les traits de la grille)**
+On redresse grossièrement avec une marge, puis on cherche les 10 traits dans chaque
+direction. Dans 3 bandes, les traits donnent des pics du profil ; on choisit 10 pics qui
+forment une grille ; on ajuste une droite par bord ; on prend les intersections.
+
+**Les 4 essais (chacun mesuré sur les 41 photos de test) :**
+
+| Essai | Idée | Photo rose | Test (sudokus résolus) |
+|---|---|---|---|
+| 1 | composantes connexes des traits | échec : deux traits qui se touchent ne font qu'un | non mesuré |
+| 2 | 10 pics consécutifs les plus réguliers + bonus d'épaisseur des bords de blocs, **toujours appliqué** | réussie | **90,2 %** (contre 97,6 %) : régression |
+| 3 | idem, mais **seulement si les traits contredisent le contour** | réussie | 90,2 % : les barres des 1 et des 7 s'intercalent entre les traits et cassent la suite |
+| 4 | **fenêtres consécutives + treillis** (les pics parasites sont sautés), pénalité par trait sauté, appliqué seulement en cas de contradiction | **réussie, sans réparation** | **97,6 %, coins identiques au centième** |
+
+Trois détails ont compté :
+- **Épaisseur des bords de blocs** : avec la grille voisine, il y a 11 traits verticaux à
+  intervalles presque réguliers. Ce sont les traits 0, 3, 6, 9, plus épais (6-7 px contre
+  3-5 px), qui désignent les bons 10.
+- **Pics coupés en deux** : un trait fin peut donner deux pics voisins (441 et 444) après
+  seuillage. On fusionne les pics à moins d'un quart de case.
+- **Ne rien changer quand tout va bien** : appliqué partout, l'affinage dégradait la
+  précision des bons coins (erreur médiane 1,1 % → 1,9 %). Le contour reste la référence ;
+  les traits servent à le **vérifier**, et ne le remplacent que s'ils le contredisent.
+
+**Leçon :** une amélioration qui règle un cas difficile doit être mesurée sur tout le jeu de
+test. L'essai 2 réglait la photo, mais il aurait fait perdre 3 sudokus du test.
