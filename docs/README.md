@@ -7,6 +7,7 @@ uniquement par vision par ordinateur, la résoudre et afficher la solution sur l
 
 | # | Document | Contenu |
 |---|---|---|
+| 0 | [00_note_de_cadrage.md](00_note_de_cadrage.md) | Note de cadrage (rendu du 30 octobre) |
 | — | [journal.md](journal.md) | Journal chronologique : pistes explorées, problèmes, décisions |
 | 1 | [01_solveur.md](01_solveur.md) | Résolution du sudoku (backtracking + MRV) |
 | 2 | [02_donnees.md](02_donnees.md) | Sources de données, vérité terrain, découpage train/val/test |
