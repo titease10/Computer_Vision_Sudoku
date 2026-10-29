@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.pyc
+data/
+mlruns/
+mlartifacts/
+runs/
+*.pt
+.pytest_cache/
+runs_cells_v1.log
+mlflow.db
+*.log
+.ipynb_checkpoints/
+# assets téléchargés/générés par les notebooks OpenCV Bootcamp
+notebooks/*.zip
+notebooks/*.png
+notebooks/*.jpg
