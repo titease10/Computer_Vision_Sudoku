@@ -1,0 +1,6 @@
+# Environnement du TD OpenCV (séparé du projet Sudoku, qui utilise OpenCV 5.0)
+# OpenCV < 5 : en 5.0, cv2.CascadeClassifier (exercice 4) n'est plus dans le paquet principal.
+opencv-python>=4.8,<5
+numpy
+matplotlib
+jupyter
