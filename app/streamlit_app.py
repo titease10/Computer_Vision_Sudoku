@@ -160,16 +160,16 @@ header[data-testid="stHeader"], footer, #MainMenu, [data-testid="stToolbar"] { d
 
 HERO = """
 <div class="hero">
-  <div class="kicker">Vision par ordinateur</div>
-  <h1>Sudoku papier</h1>
-  <p>Prenez la grille en photo : les chiffres manquants s'écrivent dessus, directement sur le papier.</p>
-  <div class="tags"><span>YOLO · détection</span><span>OpenCV · redressement</span>
-  <span>YOLO-cls · lecture</span><span>Backtracking · résolution</span></div>
+  <div class="kicker">Computer vision</div>
+  <h1>Snap Sudoku</h1>
+  <p>Snap a photo of the grid: the missing digits get written right onto the paper.</p>
+  <div class="tags"><span>YOLO · detection</span><span>OpenCV · dewarping</span>
+  <span>YOLO-cls · reading</span><span>Backtracking · solving</span></div>
 </div>
 """
 
 
-@st.cache_resource(show_spinner="Chargement des modèles…")
+@st.cache_resource(show_spinner="Loading models…")
 def load_pipeline(source: str, try_rotations: bool, repair: bool) -> SudokuPipeline:
     if source == "registry":
         return SudokuPipeline.from_registry(TRACKING_URI, try_rotations=try_rotations, repair=repair)
@@ -180,13 +180,13 @@ def css_html(theme: str) -> str:
     """Thème Auto : suit le système. Clair / Sombre : forcé, ce qui l'emporte sur la media query."""
     css = CSS.replace("</style>", charts.CHARTS_CSS + "</style>", 1)
     css = css.replace("__LIGHT__", LIGHT_VARS).replace("__DARK__", DARK_VARS)
-    forced = {"Clair": LIGHT_VARS, "Sombre": DARK_VARS}.get(theme)
+    forced = {"Light": LIGHT_VARS, "Dark": DARK_VARS}.get(theme)
     if forced:
         css += f"<style>:root {{ {forced} }}</style>"
     # Le tableau éditable est un canvas, que le CSS ne peut pas recolorer : en sombre on inverse ses couleurs
-    if theme == "Sombre":
+    if theme == "Dark":
         css += f"<style>{DARK_TABLE}</style>"
-    elif theme == "Clair":
+    elif theme == "Light":
         css += "<style>[data-testid=\"stDataFrame\"] { filter: none; }</style>"
     else:
         css += f"<style>@media (prefers-color-scheme: dark) {{ {DARK_TABLE} }}</style>"
@@ -220,49 +220,49 @@ def pick(metrics: dict[str, float], *names: str):
 def models_html() -> str:
     stats = model_stats()
     if not stats:
-        return charts.panel("Modèles", '<p class="note">Pas de base MLflow (mlflow.db) à lire : les mesures des modèles '
-                            "ne sont pas disponibles ici.</p>")
+        return charts.panel("Models", '<p class="note">No MLflow database (mlflow.db) to read: model metrics '
+                            "are not available here.</p>")
     cards = []
     if "cells" in stats:
         name, m = stats["cells"]
         perfect = m["real_grids_perfect"] / m["real_grids_total"] if m.get("real_grids_total") else None
         cards.append(charts.model_card_html(
-            "Classifieur de cases", f"YOLO11n-cls · {name}",
-            [("Cases réelles bien lues", pick(m, "real_cell_accuracy")), ("Chiffres bien lus", pick(m, "real_digit_accuracy")),
-             ("Cases vides bien lues", pick(m, "real_empty_accuracy")), ("Grilles lues sans erreur", perfect),
-             ("Validation (synthétique)", pick(m, "metrics/accuracy_top1"))],
-            "Mesuré sur les photos de test, jamais vues à l'entraînement."))
+            "Cell classifier", f"YOLO11n-cls · {name}",
+            [("Real cells read correctly", pick(m, "real_cell_accuracy")), ("Digits read correctly", pick(m, "real_digit_accuracy")),
+             ("Empty cells read correctly", pick(m, "real_empty_accuracy")), ("Grids read without error", perfect),
+             ("Validation (synthetic)", pick(m, "metrics/accuracy_top1"))],
+            "Measured on the test photos, never seen during training."))
     if "grid" in stats:
         name, m = stats["grid"]
         cards.append(charts.model_card_html(
-            "Détecteur de grille", f"YOLO11n · {name}",
+            "Grid detector", f"YOLO11n · {name}",
             [("mAP50", pick(m, "test_mAP50", "metrics/mAP50B")), ("mAP50-95", pick(m, "test_mAP50_95", "metrics/mAP50-95B")),
-             ("Précision", pick(m, "test_precision", "metrics/precisionB")), ("Rappel", pick(m, "test_recall", "metrics/recallB"))],
-            "mAP sur le jeu de test quand l'entraînement est fini, sur la validation sinon."))
+             ("Precision", pick(m, "test_precision", "metrics/precisionB")), ("Recall", pick(m, "test_recall", "metrics/recallB"))],
+            "mAP on the test set once training is done, on validation otherwise."))
     if "pipeline" in stats:
         name, m = stats["pipeline"]
         rows = [(k.replace("_", " "), v) for k, v in sorted(m.items()) if 0 <= v <= 1][:8]
-        cards.append(charts.model_card_html("Pipeline complet", f"bout en bout · {name}", rows,
-                                            "Évaluation sur les photos de test (scripts/evaluate.py)."))
+        cards.append(charts.model_card_html("Full pipeline", f"end to end · {name}", rows,
+                                            "Evaluation on the test photos (scripts/evaluate.py)."))
     return "".join(cards)
 
 
 def show_dashboard(res, grid) -> None:
     """Chiffres et graphiques sur la lecture, les temps et les modèles."""
-    st.subheader("Analyse")
-    tab_conf, tab_perf, tab_models = st.tabs(["Confiance de lecture", "Performances", "Modèles"])
+    st.subheader("Analysis")
+    tab_conf, tab_perf, tab_models = st.tabs(["Reading confidence", "Performance", "Models"])
     with tab_conf:
         mean = float(res.confidence.mean())
-        st.html(charts.panel("Confiance case par case", (
+        st.html(charts.panel("Cell-by-cell confidence", (
             f'<div class="cols"><div>{charts.heatmap_html(res.confidence, res.raw_grid)}</div>'
-            f'<div>{charts.gauge_html(mean, "confiance moyenne")}{charts.histogram_html(res.confidence)}</div></div>'),
-            "Chaque case est lue par le classifieur, qui donne sa certitude. Les cases en jaune ou en rouge sont celles "
-            "à vérifier ; la hauteur des barres est en racine carrée."))
+            f'<div>{charts.gauge_html(mean, "average confidence")}{charts.histogram_html(res.confidence)}</div></div>'),
+            "Each cell is read by the classifier, which reports its certainty. Yellow or red cells are the ones "
+            "to check; bar height is on a square-root scale."))
     with tab_perf:
         given = sum(v > 0 for row in grid for v in row)
-        cases = charts.donut_html([("chiffres imprimés", given, "c0"), ("à remplir", 81 - given, "c1")], "81", "cases")
-        st.html(f'<div class="cols"><div>{charts.panel("Temps par étape", charts.stack_html(timing_steps(res)))}</div>'
-                f'<div>{charts.panel("Les 81 cases", cases)}</div></div>')
+        cases = charts.donut_html([("printed digits", given, "c0"), ("to fill", 81 - given, "c1")], "81", "cells")
+        st.html(f'<div class="cols"><div>{charts.panel("Time per step", charts.stack_html(timing_steps(res)))}</div>'
+                f'<div>{charts.panel("The 81 cells", cases)}</div></div>')
     with tab_models:
         st.html(models_html())
 
@@ -317,96 +317,96 @@ def board_html(grid: list[list[int]], solution, doubtful: set, fixed: set, marks
 
 
 def legend_html(solved: bool, has_doubt: bool, has_fixed: bool) -> str:
-    parts = ['<b class="l-found">vert</b> chiffre trouvé'] if solved else []
+    parts = ['<b class="l-found">green</b> digit found'] if solved else []
     if has_doubt:
-        parts.append('<b class="l-doubt">jaune</b> lecture peu sûre')
+        parts.append('<b class="l-doubt">yellow</b> uncertain reading')
     if has_fixed:
-        parts.append('<b class="l-fixed">orange</b> corrigé par les règles du sudoku')
+        parts.append('<b class="l-fixed">orange</b> fixed using the sudoku rules')
     return f'<p class="legend">{" · ".join(parts)}</p>' if parts else ""
 
 
 def describe_repairs(repaired: list) -> str:
-    changes = [f"ligne {r + 1}, colonne {c + 1} : {a or 'vide'} remplacé par {b or 'vide'}"
+    changes = [f"row {r + 1}, column {c + 1}: {a or 'empty'} replaced by {b or 'empty'}"
                for r, c, a, b in repaired]
-    return "La lecture brute était impossible, une correction a été faite (" + " ; ".join(changes) + ")."
+    return "The raw reading was impossible, so a correction was made (" + " ; ".join(changes) + ")."
 
 
 STEPS = [
-    ("Détection de la grille", "YOLO encadre la grille (bleu), puis OpenCV suit les 20 traits qui la composent (orange)."),
-    ("Redressement", "La perspective est corrigée : la grille devient un carré vu de face."),
-    ("Lecture des chiffres", "Chaque case est découpée puis lue par le classifieur."),
-    ("Résolution", "Le solveur essaie un chiffre (bleu), et revient en arrière (rouge) quand il tombe sur une impasse."),
-    ("Résultat", "Les chiffres trouvés sont écrits sur la photo d'origine."),
+    ("Grid detection", "YOLO boxes the grid (blue), then OpenCV tracks the 20 lines that make it up (orange)."),
+    ("Dewarping", "The perspective is corrected: the grid becomes a square seen head-on."),
+    ("Reading the digits", "Each cell is cut out, then read by the classifier."),
+    ("Solving", "The solver tries a digit (blue) and backtracks (red) when it hits a dead end."),
+    ("Result", "The digits found are written on the original photo."),
 ]
 
 
-# Pour chaque étape : (modèle ou technique, entrée -> sortie, détails)
+# For each step: (model or technique, input -> output, details)
 STEP_INFO = [
-    ("YOLO11n <code>detect</code> (Ultralytics), puis OpenCV (seuil adaptatif + contours)",
-     "photo entière → cadre de la grille → 4 coins → 20 traits",
-     "Une seule classe, « sudoku », entraînée sur 156 photos annotées (wichtounet + rg1990). Le cadre YOLO "
-     "restreint la zone où OpenCV cherche le quadrilatère ; sans cadre, OpenCV cherche sur toute l'image."),
-    ("Homographie 4 points (<code>getPerspectiveTransform</code>), puis redressement fin par suivi des traits",
-     "4 coins → grille carrée 450×450 px",
-     "Une homographie ne suffit pas sur une page courbée : on suit les 20 traits (polynômes) et on remappe "
-     "chaque case entre ses 4 intersections (<code>cv2.remap</code>). Les 4 orientations sont ensuite testées."),
-    ("YOLO11n <code>cls</code> (Ultralytics), 10 classes : vide, 1 à 9",
-     "81 cases de 64×64 px → 81 chiffres + confiances",
-     "Entraîné sur des chiffres de polices (Chars74K) rendus comme des cases photographiées, plus de vraies cases "
-     "étiquetées. Si la grille lue n'a pas une solution unique, on remplace jusqu'à 2 des 8 cases les moins sûres "
-     "par le 2ᵉ ou 3ᵉ choix du classifieur."),
-    ("Backtracking avec heuristique MRV (<code>solver.py</code>)",
-     "grille lue → grille complète",
-     "On remplit la case vide la plus contrainte, et on revient en arrière sur une impasse. La grille est validée "
-     "avant la recherche, et son unicité vérifiée avec <code>count_solutions</code>."),
-    ("Rendu OpenCV (<code>cv2.putText</code>) sur la photo d'origine",
-     "grille résolue + 100 intersections → photo annotée",
-     "Chaque chiffre est centré sur la moyenne des 4 intersections de sa case, avec une taille proportionnelle à la "
-     "case : la perspective et la courbure du papier sont respectées."),
+    ("YOLO11n <code>detect</code> (Ultralytics), then OpenCV (adaptive threshold + contours)",
+     "full photo → grid box → 4 corners → 20 lines",
+     "A single class, “sudoku”, trained on 156 annotated photos (wichtounet + rg1990). The YOLO box "
+     "narrows the area where OpenCV looks for the quadrilateral; without a box, OpenCV searches the whole image."),
+    ("4-point homography (<code>getPerspectiveTransform</code>), then fine dewarping by line tracking",
+     "4 corners → 450×450 px square grid",
+     "A homography is not enough on a curved page: we track the 20 lines (polynomials) and remap "
+     "each cell between its 4 intersections (<code>cv2.remap</code>). The 4 orientations are then tested."),
+    ("YOLO11n <code>cls</code> (Ultralytics), 10 classes: empty, 1 to 9",
+     "81 cells of 64×64 px → 81 digits + confidences",
+     "Trained on font digits (Chars74K) rendered like photographed cells, plus real labelled cells. "
+     "If the grid read does not have a unique solution, up to 2 of the 8 least certain cells are replaced "
+     "by the classifier’s 2nd or 3rd choice."),
+    ("Backtracking with MRV heuristic (<code>solver.py</code>)",
+     "grid read → completed grid",
+     "We fill the most constrained empty cell and backtrack on a dead end. The grid is validated "
+     "before the search, and its uniqueness is checked with <code>count_solutions</code>."),
+    ("OpenCV rendering (<code>cv2.putText</code>) on the original photo",
+     "solved grid + 100 intersections → annotated photo",
+     "Each digit is centred on the mean of its cell’s 4 intersections, sized in proportion to the "
+     "cell: the perspective and curvature of the paper are respected."),
 ]
 
 
 def measures(step: int, res, extra: dict) -> list[tuple[str, str]]:
-    """Mesures réelles de cette photo pour l'étape : (valeur, légende)."""
+    """Real measurements of this photo for the step: (value, label)."""
     t = res.timings
     ms = lambda k: f"{t[k] * 1000:.0f} ms" if k in t else "—"
     if step == 0:
-        return [(f"{res.bbox_conf:.0%}" if res.bbox is not None else "OpenCV", "confiance du cadre"),
-                (str(max(res.n_grids, 1)), "grille(s) détectée(s)"), (ms("detect"), "détection")]
+        return [(f"{res.bbox_conf:.0%}" if res.bbox is not None else "OpenCV", "box confidence"),
+                (str(max(res.n_grids, 1)), "grid(s) detected"), (ms("detect"), "detection")]
     if step == 1:
-        return [(f"{90 * res.rotation}°", "rotation retenue"), (f"{res.flat.shape[1]} px", "côté de la grille"),
-                (ms("warp"), "redressement")]
+        return [(f"{90 * res.rotation}°", "rotation kept"), (f"{res.flat.shape[1]} px", "grid side"),
+                (ms("warp"), "dewarping")]
     if step == 2:
         digits = sum(v > 0 for row in res.raw_grid for v in row)
         doubt = int((res.confidence < LOW_CONF).sum())
-        return [(str(digits), "chiffres lus"), (str(doubt), "cases peu sûres"),
-                (str(len(res.repaired)), "case(s) corrigée(s)"), (ms("classify"), "lecture")]
+        return [(str(digits), "digits read"), (str(doubt), "uncertain cells"),
+                (str(len(res.repaired)), "cell(s) corrected"), (ms("classify"), "reading")]
     if step == 3:
-        return [(str(sum(row.count(0) for row in res.grid)), "cases vides"), (str(extra.get("tries", 0)), "essais"),
-                (str(extra.get("undos", 0)), "retours en arrière"), (ms("solve"), "résolution")]
-    return [(str(sum(row.count(0) for row in res.grid)), "chiffres ajoutés"), (ms("total"), "temps total")]
+        return [(str(sum(row.count(0) for row in res.grid)), "empty cells"), (str(extra.get("tries", 0)), "tries"),
+                (str(extra.get("undos", 0)), "backtracks"), (ms("solve"), "solving")]
+    return [(str(sum(row.count(0) for row in res.grid)), "digits added"), (ms("total"), "total time")]
 
 
 def timing_steps(res) -> list[tuple[str, float]]:
     t = res.timings
-    return [("Détection", t.get("detect", 0)), ("Redressement", t.get("warp", 0)),
-            ("Lecture", t.get("classify", 0)), ("Résolution", t.get("solve", 0))]
+    return [("Detection", t.get("detect", 0)), ("Dewarping", t.get("warp", 0)),
+            ("Reading", t.get("classify", 0)), ("Solving", t.get("solve", 0))]
 
 
 def step_chart_html(step: int, res, extra: dict) -> str:
-    """Le graphique qui illustre l'étape, sous le panneau d'infos."""
+    """The chart that illustrates the step, under the info panel."""
     if step == 0 and res.bbox is not None:
-        return (f'<div class="cols">{charts.gauge_html(res.bbox_conf, "confiance YOLO")}'
-                '<p class="note">Part de certitude du détecteur sur le cadre trouvé. '
-                "Sous 25 %, le cadre est écarté et OpenCV cherche seul.</p></div>")
+        return (f'<div class="cols">{charts.gauge_html(res.bbox_conf, "YOLO confidence")}'
+                '<p class="note">The detector’s certainty about the box it found. '
+                "Below 25%, the box is discarded and OpenCV searches alone.</p></div>")
     if step == 2:
         return (f'<div class="cols"><div>{charts.heatmap_html(res.confidence, res.raw_grid)}</div>'
-                f'<div>{charts.histogram_html(res.confidence)}<p class="note">Confiance du classifieur sur les 81 cases '
-                "(hauteur des barres en racine carrée).</p></div></div>")
+                f'<div>{charts.histogram_html(res.confidence)}<p class="note">Classifier confidence over the 81 cells '
+                "(bar height on a square-root scale).</p></div></div>")
     if step == 3 and extra:
         kept = extra["tries"] - extra["undos"]
-        return charts.donut_html([("chiffres posés (définitifs)", kept, "c1"), ("hypothèses abandonnées", extra["undos"], "c3")],
-                                 str(extra["tries"]), "essais")
+        return charts.donut_html([("digits placed (final)", kept, "c1"), ("abandoned guesses", extra["undos"], "c3")],
+                                 str(extra["tries"]), "tries")
     if step == 4:
         return charts.stack_html(timing_steps(res))
     return ""
@@ -416,14 +416,14 @@ def info_html(step: int, res, extra: dict | None = None) -> str:
     model, flow, detail = STEP_INFO[step]
     chart = step_chart_html(step, res, extra or {})
     chart_html = f'<div class="info-chart">{chart}</div>' if chart else ""
-    return (f'<div class="info"><div><h4>Sous le capot</h4><dl>'
-            f'<dt>Technique</dt><dd>{model}</dd><dt>Entrée → sortie</dt><dd>{flow}</dd>'
-            f'<dt>En détail</dt><dd>{detail}</dd></dl></div>'
-            f'<div><h4>Sur cette photo</h4>{tiles_html(measures(step, res, extra or {}), good_first=True)}</div>'
+    return (f'<div class="info"><div><h4>Under the hood</h4><dl>'
+            f'<dt>Technique</dt><dd>{model}</dd><dt>Input → output</dt><dd>{flow}</dd>'
+            f'<dt>In detail</dt><dd>{detail}</dd></dl></div>'
+            f'<div><h4>On this photo</h4>{tiles_html(measures(step, res, extra or {}), good_first=True)}</div>'
             f'{chart_html}</div>')
 
 
-SHORT_TITLES = ["Détection", "Redressement", "Lecture", "Résolution", "Résultat"]
+SHORT_TITLES = ["Detection", "Dewarping", "Reading", "Solving", "Result"]
 
 
 def stepper_html(step: int, n_steps: int) -> str:
@@ -436,7 +436,7 @@ def stepper_html(step: int, n_steps: int) -> str:
 
 
 def tiles_html(items: list[tuple[str, str]], good_first: bool = False) -> str:
-    """Rangée de chiffres clés : (valeur, légende)."""
+    """Row of key figures: (value, label)."""
     tiles = [f'<div class="tile{" good" if good_first and i == 0 else ""}"><b>{charts.counter(v)}</b><span>{k}</span></div>'
              for i, (v, k) in enumerate(items)]
     return f'<div class="tiles">{"".join(tiles)}</div>'
@@ -444,9 +444,9 @@ def tiles_html(items: list[tuple[str, str]], good_first: bool = False) -> str:
 
 def timing_tiles(res, n_found: int) -> str:
     t = res.timings
-    return tiles_html([(str(n_found), "chiffres ajoutés"), (f"{t['total'] * 1000:.0f} ms", "temps total"),
-                       (f"{res.bbox_conf:.0%}" if res.bbox is not None else "OpenCV", "confiance du cadre"),
-                       (f"{float(res.confidence.mean()):.0%}", "confiance de lecture")], good_first=True)
+    return tiles_html([(str(n_found), "digits added"), (f"{t['total'] * 1000:.0f} ms", "total time"),
+                       (f"{res.bbox_conf:.0%}" if res.bbox is not None else "OpenCV", "box confidence"),
+                       (f"{float(res.confidence.mean()):.0%}", "reading confidence")], good_first=True)
 
 
 def go(delta: int) -> None:
@@ -471,7 +471,7 @@ def step_detection(image, res, anim, pause) -> None:
 
 def step_warp(image, res, anim, pause) -> None:
     left, right = st.columns(2)
-    left.image(to_rgb(draw_detection(image, res)), width="stretch", caption="Photo d'origine")
+    left.image(to_rgb(draw_detection(image, res)), width="stretch", caption="Original photo")
     slot = right.empty()
     h = res.flat.shape[0]
     for n in (range(1, 11) if anim else [10]):
@@ -479,7 +479,7 @@ def step_warp(image, res, anim, pause) -> None:
         shown[: h * n // 10] = res.flat[: h * n // 10]
         slot.image(to_rgb(shown), width="stretch")
         pause(0.12)
-    right.caption("Grille redressée" + (f" (tournée de {90 * res.rotation}°)." if res.rotation else "."))
+    right.caption("Dewarped grid" + (f" (rotated by {90 * res.rotation}°)." if res.rotation else "."))
 
 
 def step_reading(res, doubtful, fixed, anim, pause) -> None:
@@ -504,8 +504,8 @@ def step_reading(res, doubtful, fixed, anim, pause) -> None:
     if res.repaired:
         right.caption(describe_repairs(res.repaired))
     if res.status != "solved":
-        right.error("Cette lecture ne donne pas une grille résoluble. Passez en « Résolution complète » "
-                    "pour corriger la case mal lue à la main.")
+        right.error("This reading does not give a solvable grid. Switch to “Full solution” "
+                    "to fix the misread cell by hand.")
 
 
 def step_solving(res, anim, pause) -> dict:
@@ -524,11 +524,11 @@ def step_solving(res, anim, pause) -> dict:
             n_undo += kind == "undo"
             if i % stride == 0:
                 board_slot.html(board_html(res.grid, cur, set(), set(), {(r, c): kind}))
-                stats.markdown(f"**{n_try}** essais · **{n_undo}** retours en arrière")
+                stats.markdown(f"**{n_try}** tries · **{n_undo}** backtracks")
                 pause(0.06)
     board_slot.html(board_html(res.grid, res.solution, set(), set(), pop=anim))
-    stats.markdown(f"**{tries}** essais · **{undos}** retours en arrière")
-    right.caption("Chaque retour en arrière est une hypothèse abandonnée : plus la grille est difficile, plus il y en a.")
+    stats.markdown(f"**{tries}** tries · **{undos}** backtracks")
+    right.caption("Each backtrack is an abandoned guess: the harder the grid, the more there are.")
     return {"tries": tries, "undos": undos}
 
 
@@ -540,12 +540,12 @@ def step_result(image, res, anim) -> None:
     right.html(board_html(res.grid, res.solution, set(), set(), pop=anim) + legend_html(True, False, False))
     ok, jpeg = cv2.imencode(".jpg", solved_photo)
     if ok:
-        right.download_button("Télécharger la photo", jpeg.tobytes(), "sudoku_resolu.jpg", "image/jpeg")
+        right.download_button("Download the photo", jpeg.tobytes(), "sudoku_solved.jpg", "image/jpeg")
 
 
 def show_steps(image: np.ndarray, res, doubtful: set, fixed: set) -> None:
     """Les étapes du pipeline une par une ; l'animation d'une étape ne se joue qu'à sa première visite."""
-    speed = st.sidebar.select_slider("Vitesse de l'animation", [0.5, 1, 2, 4], value=1, format_func=lambda s: f"×{s}")
+    speed = st.sidebar.select_slider("Animation speed", [0.5, 1, 2, 4], value=1, format_func=lambda s: f"×{s}")
     step = st.session_state.step
     n_steps = len(STEPS) if res.status == "solved" else 3
     anim = step not in st.session_state.played
@@ -573,53 +573,53 @@ def show_steps(image: np.ndarray, res, doubtful: set, fixed: set) -> None:
     st.session_state.played.add(step)
 
     prev, again, nxt, _ = st.columns([1, 1, 1.4, 3])
-    prev.button("← Précédent", on_click=go, args=(-1,), disabled=step == 0, width="stretch")
-    again.button("↻ Rejouer", on_click=replay, width="stretch")
-    nxt.button("Étape suivante →", on_click=go, args=(1,), type="primary",
+    prev.button("← Previous", on_click=go, args=(-1,), disabled=step == 0, width="stretch")
+    again.button("↻ Replay", on_click=replay, width="stretch")
+    nxt.button("Next step →", on_click=go, args=(1,), type="primary",
                disabled=step >= n_steps - 1, width="stretch")
 
 
 def main() -> None:
-    st.set_page_config(page_title="Sudoku papier", initial_sidebar_state="collapsed", layout="wide")
+    st.set_page_config(page_title="Snap Sudoku", initial_sidebar_state="collapsed", layout="wide")
     _, picker = st.columns([5, 2])
     with picker:
-        theme = st.segmented_control("Thème", ["Auto", "Clair", "Sombre"], default="Auto",
+        theme = st.segmented_control("Theme", ["Auto", "Light", "Dark"], default="Auto",
                                      label_visibility="collapsed") or "Auto"
     st.html(css_html(theme))
     st.html(HERO)
 
     with st.sidebar:
-        st.subheader("Options de démo")
+        st.subheader("Demo options")
         sources = ["registry", "local"]
-        source = st.radio("Modèles", sources, index=sources.index(os.environ.get("SUDOKU_MODEL_SOURCE", "registry")),
-                          format_func=lambda s: "MLflow Registry (champion)" if s == "registry" else "Fichiers locaux")
-        try_rotations = st.checkbox("Tester les 4 orientations", value=True,
-                                    help="Sans cette option, une grille photographiée de côté est mal lue.")
-        repair = st.checkbox("Corriger avec les règles du sudoku", value=True,
-                             help="Sans cette option, une seule case mal lue suffit à bloquer la résolution.")
+        source = st.radio("Models", sources, index=sources.index(os.environ.get("SUDOKU_MODEL_SOURCE", "registry")),
+                          format_func=lambda s: "MLflow Registry (champion)" if s == "registry" else "Local files")
+        try_rotations = st.checkbox("Test the 4 orientations", value=True,
+                                    help="Without this option, a grid photographed sideways is misread.")
+        repair = st.checkbox("Fix using the sudoku rules", value=True,
+                             help="Without this option, a single misread cell is enough to block solving.")
 
     try:
         pipe = load_pipeline(source, try_rotations, repair)
     except Exception as exc:  # registry vide, poids absents...
-        st.error(f"Impossible de charger les modèles ({source}) : {exc}")
+        st.error(f"Could not load the models ({source}): {exc}")
         st.stop()
 
-    mode = st.segmented_control("Source de la photo", ["Importer", "Caméra"], default="Importer",
-                                label_visibility="collapsed") or "Importer"
-    upload = st.file_uploader("Photo du sudoku", type=["jpg", "jpeg", "png"], label_visibility="collapsed") \
-        if mode == "Importer" else st.camera_input("Photo du sudoku", label_visibility="collapsed")
+    mode = st.segmented_control("Photo source", ["Upload", "Camera"], default="Upload",
+                                label_visibility="collapsed") or "Upload"
+    upload = st.file_uploader("Sudoku photo", type=["jpg", "jpeg", "png"], label_visibility="collapsed") \
+        if mode == "Upload" else st.camera_input("Sudoku photo", label_visibility="collapsed")
     if upload is None:
-        st.caption("📷 Pour une bonne lecture : la grille entière dans le cadre, et pas d'ombre sur les chiffres.")
+        st.caption("📷 For a good reading: the whole grid in frame, and no shadow on the digits.")
         return
 
     data = upload.getvalue()
     image = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
     if image is None:
-        st.error("Ce fichier ne s'ouvre pas comme une image.")
+        st.error("This file does not open as an image.")
         return
     key = (hashlib.md5(data).hexdigest(), source, try_rotations, repair)
     if st.session_state.get("key") != key:  # on ne relance le pipeline que si la photo change
-        with st.spinner("Lecture de la grille…"):
+        with st.spinner("Reading the grid…"):
             st.session_state.result = pipe.run(image)
         st.session_state.key = key
         st.session_state.step = 0  # nouvelle photo : retour à la première étape
@@ -627,7 +627,7 @@ def main() -> None:
     res = st.session_state.result
 
     if res.status == "no_grid":
-        st.error("Pas de grille trouvée sur cette photo. Essayez de vous rapprocher et de cadrer la grille entière.")
+        st.error("No grid found in this photo. Try moving closer and framing the whole grid.")
         st.image(to_rgb(image), width="stretch")
         return
 
@@ -635,17 +635,17 @@ def main() -> None:
     doubtful = {(r, c) for r in range(9) for c in range(9) if res.confidence[r, c] < LOW_CONF}
     fixed = {(r, c) for r, c, _, _ in res.repaired}
 
-    view = st.segmented_control("Affichage", ["Résolution complète", "Pas à pas"], default="Résolution complète",
-                                label_visibility="collapsed") or "Résolution complète"
-    if view == "Pas à pas":
+    view = st.segmented_control("View", ["Full solution", "Step by step"], default="Full solution",
+                                label_visibility="collapsed") or "Full solution"
+    if view == "Step by step":
         show_steps(image, res, doubtful, fixed)
         return
 
     # La correction se fait plus bas mais décide de ce qui s'affiche ici
     result_area = st.container()
 
-    with st.expander("Corriger une case mal lue", expanded=res.status != "solved"):
-        st.caption("Laissez vide une case sans chiffre. La solution se recalcule dès que vous changez une case.")
+    with st.expander("Fix a misread cell", expanded=res.status != "solved"):
+        st.caption("Leave a cell empty if it has no digit. The solution is recomputed as soon as you change a cell.")
         table = pd.DataFrame([[str(v) if v else "" for v in row] for row in base],
                              index=range(1, 10), columns=[str(c) for c in range(1, 10)])
         columns = {str(c): st.column_config.TextColumn(str(c), validate="^[1-9]?$", width="small")
@@ -662,19 +662,19 @@ def main() -> None:
     with result_area:
         left, right = st.columns([3, 2], gap="large")
         if shown.solution is None:
-            msg = "un chiffre apparaît deux fois dans une ligne, une colonne ou un bloc" if not is_valid_grid(grid) \
-                else "elle n'a aucune solution"
+            msg = "a digit appears twice in a row, column or block" if not is_valid_grid(grid) \
+                else "it has no solution"
             left.image(to_rgb(draw_detection(image, res)), width="stretch")
-            right.error(f"Grille impossible à résoudre : {msg}. Une case est sans doute mal lue, "
-                        "vous pouvez la corriger dans le tableau ci-dessous.")
+            right.error(f"This grid cannot be solved: {msg}. A cell is probably misread, "
+                        "you can fix it in the table below.")
         else:
             solved_photo = render_solution(image, shown)
             left.image(to_rgb(solved_photo), width="stretch")
             n_found = sum(row.count(0) for row in grid)
             right.html(timing_tiles(res, n_found))
             if count_solutions(grid) > 1:
-                right.warning("Cette grille a plusieurs solutions, celle-ci n'est peut-être pas celle du journal. "
-                              "Une case est sans doute mal lue.")
+                right.warning("This grid has several solutions, so this one may not be the one in the paper. "
+                              "A cell is probably misread.")
         right.html(board_html(grid, shown.solution, doubtful, fixed)
                    + legend_html(shown.solution is not None, bool(doubtful), bool(fixed)))
         if res.repaired and grid == res.grid:
@@ -682,22 +682,22 @@ def main() -> None:
         if shown.solution is not None:
             ok, jpeg = cv2.imencode(".jpg", solved_photo)
             if ok:
-                right.download_button("Télécharger la photo", jpeg.tobytes(), "sudoku_resolu.jpg", "image/jpeg")
+                right.download_button("Download the photo", jpeg.tobytes(), "sudoku_solved.jpg", "image/jpeg")
 
     show_dashboard(res, grid)
 
-    with st.expander("Voir comment la photo a été lue"):
+    with st.expander("See how the photo was read"):
         col1, col2 = st.columns(2)
         col1.image(to_rgb(draw_detection(image, res)), width="stretch",
-                   caption="Bleu : le cadre trouvé par YOLO. Orange : les 20 traits suivis par OpenCV.")
+                   caption="Blue: the box found by YOLO. Orange: the 20 lines tracked by OpenCV.")
         col2.image(to_rgb(res.flat), width="stretch",
-                   caption="Grille redressée, découpée ensuite en 81 cases"
-                           + (f" (tournée de {90 * res.rotation}°)." if res.rotation else "."))
+                   caption="Dewarped grid, then cut into 81 cells"
+                           + (f" (rotated by {90 * res.rotation}°)." if res.rotation else "."))
         t = res.timings
-        st.caption(f"Détection {t['detect']*1000:.0f} ms · redressement {t['warp']*1000:.0f} ms · "
-                   f"lecture {t['classify']*1000:.0f} ms · total {t['total']*1000:.0f} ms"
-                   + (f" · confiance du cadre {res.bbox_conf:.2f}" if res.bbox is not None else " · cadre trouvé par OpenCV seul")
-                   + (f" · {res.n_grids} grilles sur la photo, celle-ci est la première résolue" if res.n_grids > 1 else ""))
+        st.caption(f"Detection {t['detect']*1000:.0f} ms · dewarping {t['warp']*1000:.0f} ms · "
+                   f"reading {t['classify']*1000:.0f} ms · total {t['total']*1000:.0f} ms"
+                   + (f" · box confidence {res.bbox_conf:.2f}" if res.bbox is not None else " · box found by OpenCV alone")
+                   + (f" · {res.n_grids} grids in the photo, this is the first one solved" if res.n_grids > 1 else ""))
 
 
 if __name__ == "__main__":

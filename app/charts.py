@@ -118,13 +118,13 @@ def heatmap_html(confidence: np.ndarray, grid: Sequence[Sequence[int]]) -> str:
         for c in range(9):
             conf = float(confidence[r, c])
             cells.append(f'<div class="{_tier(conf)}" style="--i:{r * 9 + c}" '
-                         f'title="ligne {r + 1}, colonne {c + 1} : {conf:.1%}">{grid[r][c] or "·"}</div>')
+                         f'title="row {r + 1}, column {c + 1}: {conf:.1%}">{grid[r][c] or "·"}</div>')
     return (f'<div class="heat">{"".join(cells)}</div>'
-            '<div class="heat-legend"><span>peu sûr</span><i></i><span>très sûr</span></div>')
+            '<div class="heat-legend"><span>uncertain</span><i></i><span>very sure</span></div>')
 
 
 HIST_EDGES = [0.0, 0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 0.98, 0.995, 1.0001]
-HIST_LABELS = ["&lt;50", "60", "70", "80", "85", "90", "95", "98", "99,5", "100"]
+HIST_LABELS = ["&lt;50", "60", "70", "80", "85", "90", "95", "98", "99.5", "100"]
 
 
 def histogram_html(confidence: np.ndarray) -> str:
@@ -137,7 +137,7 @@ def histogram_html(confidence: np.ndarray) -> str:
         h = 100 * math.sqrt(n / top)
         cols.append(f'<div><span class="v">{n if n else ""}</span>'
                     f'<i class="bar {tone}" style="--h:{h:.1f};--i:{k}"></i><span class="l">{HIST_LABELS[k]}</span></div>')
-    return f'<div class="hist" role="img" aria-label="Répartition des confiances">{"".join(cols)}</div>'
+    return f'<div class="hist" role="img" aria-label="Confidence distribution">{"".join(cols)}</div>'
 
 
 def gauge_html(value: float, label: str) -> str:
@@ -184,6 +184,6 @@ def model_card_html(title: str, tag: str, rows: list[tuple[str, Optional[float]]
             continue
         lines.append(f'<div class="mrow"><span>{html.escape(label)}</span>'
                      f'<div class="bar"><i style="--w:{min(max(v, 0), 1) * 100:.1f}%;--i:{k}"></i></div><em>{v:.1%}</em></div>')
-    body = "".join(lines) or '<p class="note">Aucune mesure trouvée dans MLflow pour ce modèle.</p>'
+    body = "".join(lines) or '<p class="note">No metrics found in MLflow for this model.</p>'
     head = f'<div class="model"><b>{html.escape(title)}</b><span>{html.escape(tag)}</span></div>'
     return panel("", head + body, note)
