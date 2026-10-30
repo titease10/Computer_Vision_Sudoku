@@ -48,7 +48,18 @@ def count_solutions(grid: Sequence[Sequence[int]], limit: int = 2) -> int:
     return len(_search(grid, limit=limit))
 
 
-def _search(grid: Sequence[Sequence[int]], limit: int) -> list[Grid]:
+def solve_trace(grid: Sequence[Sequence[int]]) -> list[tuple[str, int, int, int]]:
+    """Déroulé de la recherche, pour l'afficher pas à pas.
+
+    Événements ("try", ligne, col, valeur) quand un chiffre est posé et ("undo", ligne, col, valeur)
+    quand il est retiré après une impasse. Liste vide si la grille n'a pas de solution.
+    """
+    events: list[tuple[str, int, int, int]] = []
+    _search(grid, limit=1, on_event=lambda *e: events.append(e))
+    return events
+
+
+def _search(grid: Sequence[Sequence[int]], limit: int, on_event=None) -> list[Grid]:
     g = _to_list(grid)
     if not is_valid_grid(g):
         return []
@@ -85,11 +96,15 @@ def _search(grid: Sequence[Sequence[int]], limit: int) -> list[Grid]:
             rows[r].add(v)
             cols[c].add(v)
             boxes[b].add(v)
+            if on_event:
+                on_event("try", r, c, v)
             if backtrack():
                 return True
             rows[r].discard(v)
             cols[c].discard(v)
             boxes[b].discard(v)
+            if on_event:
+                on_event("undo", r, c, v)
         g[r][c] = 0
         empties.insert(idx, (r, c))
         return False

@@ -1,4 +1,4 @@
-from sudoku_cv.solver import count_solutions, is_valid_grid, solve
+from sudoku_cv.solver import count_solutions, is_valid_grid, solve, solve_trace
 
 EASY = [
     [5, 3, 0, 0, 7, 0, 0, 0, 0],
@@ -79,3 +79,12 @@ def test_count_solutions():
     bad = [row[:] for row in EASY]
     bad[0][2] = 5
     assert count_solutions(bad) == 0
+
+
+def test_solve_trace_replays_to_solution():
+    events = solve_trace(EASY)
+    cur = [row[:] for row in EASY]
+    for kind, r, c, v in events:
+        cur[r][c] = v if kind == "try" else 0
+    assert cur == solve(EASY)
+    assert solve_trace([[1, 1] + [0] * 7] + [[0] * 9 for _ in range(8)]) == []
