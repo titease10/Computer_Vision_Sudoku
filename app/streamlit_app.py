@@ -27,18 +27,38 @@ TRACKING_URI = f"sqlite:///{(ROOT / 'mlflow.db').as_posix()}"
 LOCAL_WEIGHTS = (ROOT / "runs/grid/grid_v1/weights/best.pt", ROOT / "runs/cells/cells_v2/weights/best.pt")
 LOW_CONF = 0.8  # en dessous, la case est signalée comme douteuse
 
+LIGHT_VARS = """--ink: #1F1D1A; --muted: #6A665C; --line: #E3DFD2; --paper: #FAF8F3; --card: #FFFEFA;
+  --green: #1B6E3C; --green-soft: #E4F0E8; --amber: #F6E3B4; --rose: #F3CDBB; --blue: #CFE3F6; --red: #F2B8B5;
+  --shadow: rgba(31,29,26,.14); color-scheme: light;"""
+DARK_VARS = """--ink: #ECE8DD; --muted: #A59F90; --line: #37352E; --paper: #16150F; --card: #1F1E18;
+  --green: #62C48C; --green-soft: #1F3A2B; --amber: #5C4B1B; --rose: #5E3828; --blue: #204360; --red: #6E302E;
+  --shadow: rgba(0,0,0,.5); color-scheme: dark;"""
+
 CSS = """
 <style>
-:root {
-  --ink: #1F1D1A; --muted: #6A665C; --line: #E3DFD2; --paper: #FAF8F3; --card: #FFFEFA;
-  --green: #1B6E3C; --green-soft: #E4F0E8; --amber: #F6E3B4; --rose: #F3CDBB;
-  --blue: #CFE3F6; --red: #F2B8B5; --serif: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-}
+:root { __LIGHT__ }
+@media (prefers-color-scheme: dark) { :root { __DARK__ } }
+:root { --serif: "Iowan Old Style", "Palatino Linotype", Georgia, serif; }
+.stApp { background: var(--paper); color: var(--ink); }
+[data-testid="stSidebar"] { background: var(--card); }
+.stApp h1, .stApp h2, .stApp h3, .stApp label, .stApp [data-testid="stMarkdownContainer"] { color: var(--ink); }
+[data-testid="stCaptionContainer"] { color: var(--muted); }
+/* widgets natifs : Streamlit reste clair même quand le thème est sombre */
+[data-testid="stButtonGroup"] button, [data-testid^="stBaseButton-segmented_control"] { background: var(--card); color: var(--ink); border-color: var(--line); }
+[data-testid="stButtonGroup"] button *, [data-testid^="stBaseButton-segmented_control"] * { color: inherit; }
+[data-testid="stButtonGroup"] button[aria-checked="true"], [data-testid="stButtonGroup"] button[aria-pressed="true"] { background: var(--green-soft); color: var(--green); border-color: var(--green); }
+[data-testid="stBaseButton-segmented_controlActive"] { background: var(--green-soft); color: var(--green); border-color: var(--green); }
+[data-testid="stFileUploaderDropzone"] button, .stButton > button, .stDownloadButton > button { background: var(--card); color: var(--ink); }
+[data-testid="stFileUploaderDropzone"] small, [data-testid="stFileUploaderDropzone"] span { color: var(--muted); }
+[data-testid="stSpinner"], [data-testid="stSpinner"] * { background: transparent; color: var(--ink); }
+[data-testid="stExpander"] summary, [data-testid="stExpander"] summary * { color: var(--ink); }
+[data-testid="stSidebar"] * { color: var(--ink); }
+.stButton > button:disabled { opacity: .45; }
 header[data-testid="stHeader"], footer, #MainMenu, [data-testid="stToolbar"] { display: none !important; }
 .block-container { max-width: 1120px; padding: 2rem 1.5rem 4rem; }
 
 /* en-tête */
-.hero { padding: 1.2rem 0 1.6rem; border-bottom: 1px solid var(--line); margin-bottom: 1.6rem; }
+.hero { padding: 0 0 1.6rem; margin-top: -2.2rem; border-bottom: 1px solid var(--line); margin-bottom: 1.6rem; }
 .hero .kicker { font-size: .78rem; letter-spacing: .14em; text-transform: uppercase; color: var(--green); font-weight: 600; }
 .hero h1 { font-family: var(--serif); font-size: 2.8rem; line-height: 1.1; margin: .25rem 0 .5rem; color: var(--ink); }
 .hero p { font-size: 1.05rem; color: var(--muted); margin: 0; max-width: 40rem; }
@@ -55,8 +75,8 @@ header[data-testid="stHeader"], footer, #MainMenu, [data-testid="stToolbar"] { d
   border-radius: 10px; border: 1px solid var(--line); font-weight: 600; transition: transform .1s, box-shadow .15s;
 }
 .stButton > button:hover, .stDownloadButton > button:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(31,29,26,.12); }
-.stButton > button[kind="primary"] { background: var(--green); border-color: var(--green); color: #fff; }
-[data-testid="stImage"] img { border-radius: 12px; box-shadow: 0 2px 14px rgba(31,29,26,.12); }
+.stButton > button[kind="primary"], .stButton > button[kind="primary"] * { background: var(--green); border-color: var(--green); color: var(--paper); }
+[data-testid="stImage"] img { border-radius: 12px; box-shadow: 0 2px 14px var(--shadow); }
 [data-testid="stExpander"] { border-radius: 12px; border-color: var(--line); background: var(--card); }
 
 /* indicateur d'étapes */
@@ -83,7 +103,7 @@ header[data-testid="stHeader"], footer, #MainMenu, [data-testid="stToolbar"] { d
   display: grid; box-sizing: border-box; aspect-ratio: 1; width: 100%; max-width: 440px; overflow: hidden;
   grid-template-columns: repeat(9, minmax(0, 1fr)); grid-template-rows: repeat(9, minmax(0, 1fr));
   border: 2px solid var(--ink); border-radius: 10px; background: var(--card);
-  box-shadow: 0 6px 22px rgba(31,29,26,.14);
+  box-shadow: 0 6px 22px var(--shadow);
   font-family: var(--serif); font-size: clamp(1rem, 4.2vw, 1.5rem); font-variant-numeric: tabular-nums;
 }
 .board div { box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 1px solid var(--line); }
@@ -99,7 +119,29 @@ header[data-testid="stHeader"], footer, #MainMenu, [data-testid="stToolbar"] { d
 .legend .l-found { color: var(--green); font-weight: 700; }
 .legend .l-doubt { background: var(--amber); }
 .legend .l-fixed { background: var(--rose); }
-@media (max-width: 640px) { .hero h1 { font-size: 2.1rem; } .stepper .t { display: none; } }
+/* panneau « sous le capot » */
+.info { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 1.1rem 1.3rem; margin: 1.2rem 0 1rem;
+  display: grid; grid-template-columns: 3fr 2fr; gap: 1.5rem; }
+.info h4 { margin: 0 0 .6rem; font-size: .78rem; letter-spacing: .12em; text-transform: uppercase; color: var(--green); }
+.info dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: .45rem 1rem; font-size: .92rem; }
+.info dt { color: var(--muted); }
+.info dd { margin: 0; color: var(--ink); }
+.info code { background: var(--green-soft); color: var(--green); padding: .05em .4em; border-radius: 4px; font-size: .85em; }
+.info .tiles { margin: 0; grid-template-columns: repeat(2, 1fr); }
+.info .tile b { font-size: 1.3rem; }
+@media (max-width: 760px) { .info { grid-template-columns: 1fr; } }
+
+/* animations */
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes pop { 0% { opacity: 0; transform: scale(.3); } 70% { transform: scale(1.18); } 100% { opacity: 1; transform: scale(1); } }
+@keyframes ring { 0% { box-shadow: 0 0 0 0 rgba(27,110,60,.45); } 100% { box-shadow: 0 0 0 9px rgba(27,110,60,0); } }
+.hero, .stepper, .step-text, .info, .tiles .tile { animation: rise .55s cubic-bezier(.2,.7,.2,1) both; }
+.tiles .tile:nth-child(2) { animation-delay: .07s; } .tiles .tile:nth-child(3) { animation-delay: .14s; }
+.tiles .tile:nth-child(4) { animation-delay: .21s; }
+.stepper .on .n { animation: ring 1.8s ease-out infinite; }
+.board.pop .found { animation: pop .4s cubic-bezier(.3,1.4,.5,1) both; animation-delay: calc(var(--i) * 14ms); }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+@media (max-width: 640px) { .hero { margin-top: 0; } .hero h1 { font-size: 2.1rem; } .stepper .t { display: none; } }
 </style>
 """
 
@@ -120,6 +162,13 @@ def load_pipeline(source: str, try_rotations: bool, repair: bool) -> SudokuPipel
     if source == "registry":
         return SudokuPipeline.from_registry(TRACKING_URI, try_rotations=try_rotations, repair=repair)
     return SudokuPipeline(*LOCAL_WEIGHTS, try_rotations=try_rotations, repair=repair)
+
+
+def css_html(theme: str) -> str:
+    """Thème Auto : suit le système. Clair / Sombre : forcé, ce qui l'emporte sur la media query."""
+    css = CSS.replace("__LIGHT__", LIGHT_VARS).replace("__DARK__", DARK_VARS)
+    forced = {"Clair": LIGHT_VARS, "Sombre": DARK_VARS}.get(theme)
+    return css + (f"<style>:root {{ {forced} }}</style>" if forced else "")
 
 
 def to_rgb(image: np.ndarray) -> np.ndarray:
@@ -146,10 +195,12 @@ def draw_detection(image: np.ndarray, res, n_lines: int = 20, with_bbox: bool = 
     return out
 
 
-def board_html(grid: list[list[int]], solution, doubtful: set, fixed: set, marks: dict | None = None) -> str:
+def board_html(grid: list[list[int]], solution, doubtful: set, fixed: set, marks: dict | None = None,
+               pop: bool = False) -> str:
     """La grille dessinée : chiffres lus en noir, chiffres trouvés en vert, cases à vérifier surlignées.
 
-    `marks` ({(ligne, col): classe CSS}) surligne des cases pendant les animations.
+    `marks` ({(ligne, col): classe CSS}) surligne des cases pendant les animations ;
+    `pop` fait apparaître les chiffres trouvés un à un.
     """
     marks = marks or {}
     cells = []
@@ -165,8 +216,8 @@ def board_html(grid: list[list[int]], solution, doubtful: set, fixed: set, marks
                 classes.append("fixed")
             elif (r, c) in doubtful:
                 classes.append("doubt")
-            cells.append(f'<div class="{" ".join(classes)}">{value}</div>')
-    return f'<div class="board">{"".join(cells)}</div>'
+            cells.append(f'<div class="{" ".join(classes)}" style="--i:{r * 9 + c}">{value}</div>')
+    return f'<div class="board{" pop" if pop else ""}">{"".join(cells)}</div>'
 
 
 def legend_html(solved: bool, has_doubt: bool, has_fixed: bool) -> str:
@@ -191,6 +242,61 @@ STEPS = [
     ("Résolution", "Le solveur essaie un chiffre (bleu), et revient en arrière (rouge) quand il tombe sur une impasse."),
     ("Résultat", "Les chiffres trouvés sont écrits sur la photo d'origine."),
 ]
+
+
+# Pour chaque étape : (modèle ou technique, entrée -> sortie, détails)
+STEP_INFO = [
+    ("YOLO11n <code>detect</code> (Ultralytics), puis OpenCV (seuil adaptatif + contours)",
+     "photo entière → cadre de la grille → 4 coins → 20 traits",
+     "Une seule classe, « sudoku », entraînée sur 156 photos annotées (wichtounet + rg1990). Le cadre YOLO "
+     "restreint la zone où OpenCV cherche le quadrilatère ; sans cadre, OpenCV cherche sur toute l'image."),
+    ("Homographie 4 points (<code>getPerspectiveTransform</code>), puis redressement fin par suivi des traits",
+     "4 coins → grille carrée 450×450 px",
+     "Une homographie ne suffit pas sur une page courbée : on suit les 20 traits (polynômes) et on remappe "
+     "chaque case entre ses 4 intersections (<code>cv2.remap</code>). Les 4 orientations sont ensuite testées."),
+    ("YOLO11n <code>cls</code> (Ultralytics), 10 classes : vide, 1 à 9",
+     "81 cases de 64×64 px → 81 chiffres + confiances",
+     "Entraîné sur des chiffres de polices (Chars74K) rendus comme des cases photographiées, plus de vraies cases "
+     "étiquetées. Si la grille lue n'a pas une solution unique, on remplace jusqu'à 2 des 8 cases les moins sûres "
+     "par le 2ᵉ ou 3ᵉ choix du classifieur."),
+    ("Backtracking avec heuristique MRV (<code>solver.py</code>)",
+     "grille lue → grille complète",
+     "On remplit la case vide la plus contrainte, et on revient en arrière sur une impasse. La grille est validée "
+     "avant la recherche, et son unicité vérifiée avec <code>count_solutions</code>."),
+    ("Rendu OpenCV (<code>cv2.putText</code>) sur la photo d'origine",
+     "grille résolue + 100 intersections → photo annotée",
+     "Chaque chiffre est centré sur la moyenne des 4 intersections de sa case, avec une taille proportionnelle à la "
+     "case : la perspective et la courbure du papier sont respectées."),
+]
+
+
+def measures(step: int, res, extra: dict) -> list[tuple[str, str]]:
+    """Mesures réelles de cette photo pour l'étape : (valeur, légende)."""
+    t = res.timings
+    ms = lambda k: f"{t[k] * 1000:.0f} ms" if k in t else "—"
+    if step == 0:
+        return [(f"{res.bbox_conf:.0%}" if res.bbox is not None else "OpenCV", "confiance du cadre"),
+                (str(max(res.n_grids, 1)), "grille(s) détectée(s)"), (ms("detect"), "détection")]
+    if step == 1:
+        return [(f"{90 * res.rotation}°", "rotation retenue"), (f"{res.flat.shape[1]} px", "côté de la grille"),
+                (ms("warp"), "redressement")]
+    if step == 2:
+        digits = sum(v > 0 for row in res.raw_grid for v in row)
+        doubt = int((res.confidence < LOW_CONF).sum())
+        return [(str(digits), "chiffres lus"), (str(doubt), "cases peu sûres"),
+                (str(len(res.repaired)), "case(s) corrigée(s)"), (ms("classify"), "lecture")]
+    if step == 3:
+        return [(str(sum(row.count(0) for row in res.grid)), "cases vides"), (str(extra.get("tries", 0)), "essais"),
+                (str(extra.get("undos", 0)), "retours en arrière"), (ms("solve"), "résolution")]
+    return [(str(sum(row.count(0) for row in res.grid)), "chiffres ajoutés"), (ms("total"), "temps total")]
+
+
+def info_html(step: int, res, extra: dict | None = None) -> str:
+    model, flow, detail = STEP_INFO[step]
+    return (f'<div class="info"><div><h4>Sous le capot</h4><dl>'
+            f'<dt>Technique</dt><dd>{model}</dd><dt>Entrée → sortie</dt><dd>{flow}</dd>'
+            f'<dt>En détail</dt><dd>{detail}</dd></dl></div>'
+            f'<div><h4>Sur cette photo</h4>{tiles_html(measures(step, res, extra or {}), good_first=True)}</div></div>')
 
 
 SHORT_TITLES = ["Détection", "Redressement", "Lecture", "Résolution", "Résultat"]
@@ -278,7 +384,7 @@ def step_reading(res, doubtful, fixed, anim, pause) -> None:
                     "pour corriger la case mal lue à la main.")
 
 
-def step_solving(res, anim, pause) -> None:
+def step_solving(res, anim, pause) -> dict:
     left, right = st.columns([3, 2], gap="large")
     events = solve_trace(res.grid)
     tries = sum(e[0] == "try" for e in events)
@@ -296,17 +402,18 @@ def step_solving(res, anim, pause) -> None:
                 board_slot.html(board_html(res.grid, cur, set(), set(), {(r, c): kind}))
                 stats.markdown(f"**{n_try}** essais · **{n_undo}** retours en arrière")
                 pause(0.06)
-    board_slot.html(board_html(res.grid, res.solution, set(), set()))
+    board_slot.html(board_html(res.grid, res.solution, set(), set(), pop=anim))
     stats.markdown(f"**{tries}** essais · **{undos}** retours en arrière")
     right.caption("Chaque retour en arrière est une hypothèse abandonnée : plus la grille est difficile, plus il y en a.")
+    return {"tries": tries, "undos": undos}
 
 
-def step_result(image, res) -> None:
+def step_result(image, res, anim) -> None:
     solved_photo = render_solution(image, res)
     left, right = st.columns([3, 2], gap="large")
     left.image(to_rgb(solved_photo), width="stretch")
     right.html(timing_tiles(res, sum(row.count(0) for row in res.grid)))
-    right.html(board_html(res.grid, res.solution, set(), set()) + legend_html(True, False, False))
+    right.html(board_html(res.grid, res.solution, set(), set(), pop=anim) + legend_html(True, False, False))
     ok, jpeg = cv2.imencode(".jpg", solved_photo)
     if ok:
         right.download_button("Télécharger la photo", jpeg.tobytes(), "sudoku_resolu.jpg", "image/jpeg")
@@ -323,6 +430,7 @@ def show_steps(image: np.ndarray, res, doubtful: set, fixed: set) -> None:
         if anim:
             time.sleep(seconds / speed)
 
+    extra: dict = {}
     title, text = STEPS[step]
     st.html(stepper_html(step, n_steps))
     st.subheader(title)
@@ -334,9 +442,10 @@ def show_steps(image: np.ndarray, res, doubtful: set, fixed: set) -> None:
     elif step == 2:
         step_reading(res, doubtful, fixed, anim, pause)
     elif step == 3:
-        step_solving(res, anim, pause)
+        extra = step_solving(res, anim, pause)
     else:
-        step_result(image, res)
+        step_result(image, res, anim)
+    st.html(info_html(step, res, extra))
     st.session_state.played.add(step)
 
     prev, again, nxt, _ = st.columns([1, 1, 1.4, 3])
@@ -348,7 +457,11 @@ def show_steps(image: np.ndarray, res, doubtful: set, fixed: set) -> None:
 
 def main() -> None:
     st.set_page_config(page_title="Sudoku papier", initial_sidebar_state="collapsed", layout="wide")
-    st.html(CSS)
+    _, picker = st.columns([5, 2])
+    with picker:
+        theme = st.segmented_control("Thème", ["Auto", "Clair", "Sombre"], default="Auto",
+                                     label_visibility="collapsed") or "Auto"
+    st.html(css_html(theme))
     st.html(HERO)
 
     with st.sidebar:

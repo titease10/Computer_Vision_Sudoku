@@ -1,12 +1,10 @@
 [client]
 toolbarMode = "minimal"
 
+# Pas de base ni de couleurs de fond : Streamlit suit le thème du système, et l'app
+# gère ses propres couleurs (variables CSS, sélecteur Auto / Clair / Sombre).
 [theme]
-base = "light"
 primaryColor = "#1B6E3C"
-backgroundColor = "#FAF8F3"
-secondaryBackgroundColor = "#EFECE3"
-textColor = "#1F1D1A"
 font = "sans-serif"
 headingFont = "serif"
 baseRadius = "small"
