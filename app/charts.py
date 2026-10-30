@@ -64,6 +64,8 @@ CHARTS_CSS = r"""
 .ring > div small { display: block; font-family: sans-serif; font-size: .62rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-top: .2rem; }
 .gauge { background: conic-gradient(var(--green) calc(var(--p) * 1%), var(--line) 0); animation: fillp 1.4s cubic-bezier(.2,.8,.2,1) both; }
 .donut { animation: fillk 1.3s cubic-bezier(.2,.8,.2,1) both; }
+.ring-label { display: block; text-align: center; margin: .6rem 0 .8rem; font-size: .72rem; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--muted); }
 .legend-list { list-style: none; padding: 0; margin: .6rem 0 0; font-size: .85rem; color: var(--ink); }
 .legend-list li { display: flex; align-items: center; gap: .5rem; margin: .2rem 0; }
 .legend-list i { width: .7rem; height: .7rem; border-radius: 3px; flex: none; }
@@ -172,10 +174,11 @@ def histogram_html(confidence: np.ndarray) -> str:
 
 
 def gauge_html(value: float, label: str) -> str:
-    """Anneau rempli à `value` (0 à 1), avec la valeur au centre."""
+    """Anneau rempli à `value` (0 à 1), valeur au centre et libellé dessous (trop long pour tenir dans le trou)."""
     value = min(max(value, 0.0), 1.0)
     return (f'<div class="ring gauge" style="--p:{value * 100:.1f}" role="img" aria-label="{html.escape(label)} : {value:.0%}">'
-            f'<div>{counter(f"{value * 100:.0f}%")}<small>{html.escape(label)}</small></div></div>')
+            f'<div>{counter(f"{value * 100:.0f}%")}</div></div>'
+            f'<span class="ring-label">{html.escape(label)}</span>')
 
 
 PALETTE = {"c0": "var(--blue)", "c1": "var(--green)", "c2": "var(--amber)", "c3": "var(--rose)", "c4": "var(--muted)"}
