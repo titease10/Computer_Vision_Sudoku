@@ -23,6 +23,7 @@ sys.path.insert(0, str(ROOT / "app"))
 
 import charts  # noqa: E402
 import classify_service  # noqa: E402
+import demo  # noqa: E402
 import extras  # noqa: E402
 
 from sudoku_cv.pipeline import SudokuPipeline, render_solution  # noqa: E402
@@ -34,10 +35,10 @@ LOW_CONF = 0.8  # en dessous, la case est signalée comme douteuse
 
 LIGHT_VARS = """--ink: #1F1D1A; --muted: #6A665C; --line: #E3DFD2; --paper: #FAF8F3; --card: #FFFEFA;
   --green: #1B6E3C; --green-soft: #E4F0E8; --amber: #F6E3B4; --rose: #F3CDBB; --blue: #CFE3F6; --red: #F2B8B5;
-  --shadow: rgba(31,29,26,.14); color-scheme: light;"""
+  --shadow: rgba(31,29,26,.14); --scrim: rgba(31,29,26,.5); color-scheme: light;"""
 DARK_VARS = """--ink: #ECE8DD; --muted: #A59F90; --line: #37352E; --paper: #16150F; --card: #1F1E18;
   --green: #62C48C; --green-soft: #1F3A2B; --amber: #5C4B1B; --rose: #5E3828; --blue: #204360; --red: #6E302E;
-  --shadow: rgba(0,0,0,.5); color-scheme: dark;"""
+  --shadow: rgba(0,0,0,.5); --scrim: rgba(0,0,0,.7); color-scheme: dark;"""
 
 DARK_TABLE = '[data-testid="stDataFrame"] { filter: invert(.9) hue-rotate(180deg); }'
 
@@ -48,6 +49,13 @@ CSS = """
 :root { --serif: "Iowan Old Style", "Palatino Linotype", Georgia, serif; }
 .stApp { background: var(--paper); color: var(--ink); }
 [data-testid="stSidebar"] { background: var(--card); }
+/* modale : rendue hors de .stApp, donc sans le thème de l'app. Voile sombre derrière, fond du thème devant */
+[data-testid="stDialog"] { background: var(--scrim); color: var(--ink); }
+[data-testid="stDialog"] > div, [data-testid="stDialog"] [role="dialog"] { background: var(--paper); color: var(--ink); }
+[data-testid="stDialog"] h1, [data-testid="stDialog"] h2, [data-testid="stDialog"] h3, [data-testid="stDialog"] label,
+[data-testid="stDialog"] [data-testid="stMarkdownContainer"] { color: var(--ink); }
+[data-testid="stDialog"] [data-testid="stCaptionContainer"] { color: var(--muted); }
+[data-testid="stDialog"] button[aria-label="Close"] { color: var(--ink); background: transparent; }
 .stApp h1, .stApp h2, .stApp h3, .stApp label, .stApp [data-testid="stMarkdownContainer"] { color: var(--ink); }
 [data-testid="stCaptionContainer"] { color: var(--muted); }
 /* widgets natifs : Streamlit reste clair même quand le thème est sombre */
@@ -402,12 +410,14 @@ def stepper(current: int, n_steps: int) -> int:
     picked = st.pills("Step", list(range(n_steps)), default=current, selection_mode="single",
                       format_func=lambda i: step_label(i, current), key=f"stepper_{current}_{nonce}",
                       label_visibility="collapsed")
+    # dans une modale, un rerun complet la fermerait : on ne relance que son fragment
+    rerun = (lambda: st.rerun(scope="fragment")) if st.session_state.get("in_dialog") else st.rerun
     if picked is None:  # un clic sur l'étape active la désélectionne : on la remet
         st.session_state.stepper_nonce = nonce + 1
-        st.rerun()
+        rerun()
     if picked != current:  # nouvelle étape : on relance pour que les coches et la sélection soient à jour
         st.session_state.step = picked
-        st.rerun()
+        rerun()
     return picked
 
 
@@ -519,9 +529,12 @@ def step_result(image, res, anim, banner) -> None:
         right.download_button("Download the photo", jpeg.tobytes(), "sudoku_solved.jpg", "image/jpeg")
 
 
-def show_steps(image: np.ndarray, res, doubtful: set, fixed: set) -> None:
-    """Les étapes du pipeline une par une ; l'animation d'une étape ne se joue qu'à sa première visite."""
-    speed = st.sidebar.select_slider("Animation speed", [0.5, 1, 2, 4], value=1, format_func=lambda s: f"×{s}")
+def show_steps(image: np.ndarray, res, doubtful: set, fixed: set, controls=st.sidebar) -> None:
+    """Les étapes du pipeline une par une ; l'animation d'une étape ne se joue qu'à sa première visite.
+
+    `controls` : où mettre le réglage de vitesse (la barre latérale n'existe pas dans une modale).
+    """
+    speed = controls.select_slider("Animation speed", [0.5, 1, 2, 4], value=1, format_func=lambda s: f"×{s}")
     n_steps = len(STEPS) if res.status == "solved" else 3
     step = stepper(min(st.session_state.step, n_steps - 1), n_steps)
     st.session_state.step = step
@@ -565,43 +578,9 @@ def show_steps(image: np.ndarray, res, doubtful: set, fixed: set) -> None:
             nxt.button("Next step →", on_click=go, args=(1,), type="primary", width="stretch")
 
 
-def main() -> None:
-    st.set_page_config(page_title="Snap Sudoku", initial_sidebar_state="collapsed", layout="wide")
-    _, picker = st.columns([5, 2])
-    with picker:
-        theme = st.segmented_control("Theme", ["Auto", "Light", "Dark"], default="Auto",
-                                     label_visibility="collapsed") or "Auto"
-    st.html(css_html(theme))
-    extras.install(classify_service.PORT)
-    st.html(HERO)
-
-    with st.sidebar:
-        st.subheader("Demo options")
-        sources = ["registry", "local"]
-        source = st.radio("Models", sources, index=sources.index(os.environ.get("SUDOKU_MODEL_SOURCE", "registry")),
-                          format_func=lambda s: "MLflow Registry (champion)" if s == "registry" else "Local files")
-        try_rotations = st.checkbox("Test the 4 orientations", value=True,
-                                    help="Without this option, a grid photographed sideways is misread.")
-        repair = st.checkbox("Fix using the sudoku rules", value=True,
-                             help="Without this option, a single misread cell is enough to block solving.")
-
-    try:
-        pipe = load_pipeline(source, try_rotations, repair)
-    except Exception as exc:  # registry vide, poids absents...
-        st.error(f"Could not load the models ({source}): {exc}")
-        st.stop()
-    start_classify_service()
-    classify_service.attach(pipe.classifier)
-
-    mode = st.segmented_control("Photo source", ["Upload", "Camera"], default="Upload",
-                                label_visibility="collapsed") or "Upload"
-    upload = st.file_uploader("Sudoku photo", type=["jpg", "jpeg", "png"], label_visibility="collapsed") \
-        if mode == "Upload" else st.camera_input("Sudoku photo", label_visibility="collapsed")
-    if upload is None:
-        st.caption("📷 For a good reading: the whole grid in frame, and no shadow on the digits.")
-        return
-
-    data = upload.getvalue()
+def show_photo(pipe, data: bytes, source: str, try_rotations: bool, repair: bool, banner=None, in_dialog: bool = False) -> None:
+    """Lit la photo et affiche le résultat. `banner(res)` ajoute un bandeau au-dessus ; `in_dialog` : on est dans une modale."""
+    st.session_state.in_dialog = in_dialog
     image = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
     if image is None:
         st.error("This file does not open as an image.")
@@ -615,6 +594,9 @@ def main() -> None:
         st.session_state.played = set()
     res = st.session_state.result
 
+    if banner is not None:
+        banner(res)
+
     if res.status == "no_grid":
         st.error("No grid found in this photo. Try moving closer and framing the whole grid.")
         st.image(to_rgb(image), width="stretch")
@@ -627,7 +609,7 @@ def main() -> None:
     view = st.segmented_control("View", ["Full solution", "Step by step"], default="Full solution",
                                 label_visibility="collapsed") or "Full solution"
     if view == "Step by step":
-        show_steps(image, res, doubtful, fixed)
+        show_steps(image, res, doubtful, fixed, controls=st if in_dialog else st.sidebar)
         return
 
     # La correction se fait plus bas mais décide de ce qui s'affiche ici
@@ -687,6 +669,50 @@ def main() -> None:
                    f"reading {t['classify']*1000:.0f} ms · total {t['total']*1000:.0f} ms"
                    + (f" · box confidence {res.bbox_conf:.2f}" if res.bbox is not None else " · box found by OpenCV alone")
                    + (f" · {res.n_grids} grids in the photo, this is the first one solved" if res.n_grids > 1 else ""))
+
+
+
+def main() -> None:
+    st.set_page_config(page_title="Snap Sudoku", initial_sidebar_state="collapsed", layout="wide")
+    _, picker = st.columns([5, 2])
+    with picker:
+        theme = st.segmented_control("Theme", ["Auto", "Light", "Dark"], default="Auto",
+                                     label_visibility="collapsed") or "Auto"
+    st.html(css_html(theme))
+    extras.install(classify_service.PORT)
+    st.html(HERO)
+
+    with st.sidebar:
+        st.subheader("Demo options")
+        sources = ["registry", "local"]
+        source = st.radio("Models", sources, index=sources.index(os.environ.get("SUDOKU_MODEL_SOURCE", "registry")),
+                          format_func=lambda s: "MLflow Registry (champion)" if s == "registry" else "Local files")
+        try_rotations = st.checkbox("Test the 4 orientations", value=True,
+                                    help="Without this option, a grid photographed sideways is misread.")
+        repair = st.checkbox("Fix using the sudoku rules", value=True,
+                             help="Without this option, a single misread cell is enough to block solving.")
+
+    try:
+        pipe = load_pipeline(source, try_rotations, repair)
+    except Exception as exc:  # registry vide, poids absents...
+        st.error(f"Could not load the models ({source}): {exc}")
+        st.stop()
+    start_classify_service()
+    classify_service.attach(pipe.classifier)
+
+    mode = st.segmented_control("Photo source", ["Upload", "Camera", "Demo"], default="Upload",
+                                label_visibility="collapsed") or "Upload"
+    if mode == "Demo":
+        demo.show(pipe, (source, try_rotations, repair),
+                  lambda data, banner: show_photo(pipe, data, source, try_rotations, repair, banner, in_dialog=True))
+        return
+    upload = st.file_uploader("Sudoku photo", type=["jpg", "jpeg", "png"], label_visibility="collapsed") \
+        if mode == "Upload" else st.camera_input("Sudoku photo", label_visibility="collapsed")
+    data = upload.getvalue() if upload is not None else None
+    if data is None:
+        st.caption("📷 For a good reading: the whole grid in frame, and no shadow on the digits.")
+        return
+    show_photo(pipe, data, source, try_rotations, repair)
 
 
 if __name__ == "__main__":

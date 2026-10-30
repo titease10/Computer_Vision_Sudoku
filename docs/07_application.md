@@ -31,6 +31,26 @@ La barre latérale, repliée par défaut, permet de choisir les modèles (Model 
 `champion`, ou fichiers locaux) et de couper le test des orientations ou la réparation, pour montrer en
 démo ce que chacun apporte.
 
+## Le mode démo
+
+Le sélecteur de source propose `Demo` à côté de `Upload` et `Camera`. L'application fabrique un lot de photos
+synthétiques dont on connaît la bonne réponse (code : `src/sudoku_cv/generator.py`, `synth.py`, `demo_batch.py`,
+interface dans `app/demo.py`). Une graine fixe le lot, et trois tailles donnent 18, 36 ou 54 photos.
+
+Chaque passage couvre : grilles propres, de travers, couchées à 90° ou à l'envers, dans l'ombre, plusieurs
+grilles sur la page, **grilles invalides** (doublon visible, sans solution, plusieurs solutions), page sans grille,
+et trois **cas limites** (flou fort, sombre et bruité, grille coupée).
+
+« Run the whole batch » lit tout le lot et classe chaque photo : correct, limite atteinte (cas limite non résolu),
+raté, ou **réponse fausse** (solution qui n'est pas la grille de la photo, ou grille invalide « résolue » sans correction). Un clic
+sur « Open » ouvre la photo dans une fenêtre modale, avec le parcours habituel (résolution, pas à pas, correction)
+et un bandeau qui rappelle ce qu'elle doit montrer. On la ferme pour revenir au lot, résultats compris.
+Le lot se télécharge en zip, avec un `manifest.csv` de la réponse attendue.
+
+Sur une grille invalide (doublon, ou plusieurs solutions), l'application a deux bonnes réponses : refuser, ou
+corriger les cases en cause puis résoudre. La démo compte les deux comme justes ; une grille invalide résolue
+sans correction serait en revanche une réponse fausse.
+
 ## Choix techniques
 
 `st.cache_resource` charge les modèles YOLO une seule fois. Le résultat du pipeline est gardé dans
