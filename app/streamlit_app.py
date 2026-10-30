@@ -19,6 +19,9 @@ import streamlit as st
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "app"))
+
+import charts  # noqa: E402
 
 from sudoku_cv.pipeline import SudokuPipeline, render_solution  # noqa: E402
 from sudoku_cv.solver import count_solutions, is_valid_grid, solve, solve_trace  # noqa: E402
@@ -34,6 +37,8 @@ DARK_VARS = """--ink: #ECE8DD; --muted: #A59F90; --line: #37352E; --paper: #1615
   --green: #62C48C; --green-soft: #1F3A2B; --amber: #5C4B1B; --rose: #5E3828; --blue: #204360; --red: #6E302E;
   --shadow: rgba(0,0,0,.5); color-scheme: dark;"""
 
+DARK_TABLE = '[data-testid="stDataFrame"] { filter: invert(.9) hue-rotate(180deg); }'
+
 CSS = """
 <style>
 :root { __LIGHT__ }
@@ -46,14 +51,20 @@ CSS = """
 /* widgets natifs : Streamlit reste clair même quand le thème est sombre */
 [data-testid="stButtonGroup"] button, [data-testid^="stBaseButton-segmented_control"] { background: var(--card); color: var(--ink); border-color: var(--line); }
 [data-testid="stButtonGroup"] button *, [data-testid^="stBaseButton-segmented_control"] * { color: inherit; }
-[data-testid="stButtonGroup"] button[aria-checked="true"], [data-testid="stButtonGroup"] button[aria-pressed="true"] { background: var(--green-soft); color: var(--green); border-color: var(--green); }
+[data-testid="stButtonGroup"] button[aria-checked="true"], [data-testid="stButtonGroup"] button[aria-pressed="true"] { background: var(--green-soft) !important; color: var(--green) !important; border-color: var(--green) !important; font-weight: 600; }
 [data-testid="stBaseButton-segmented_controlActive"] { background: var(--green-soft); color: var(--green); border-color: var(--green); }
 [data-testid="stFileUploaderDropzone"] button, .stButton > button, .stDownloadButton > button { background: var(--card); color: var(--ink); }
 [data-testid="stFileUploaderDropzone"] small, [data-testid="stFileUploaderDropzone"] span { color: var(--muted); }
 [data-testid="stSpinner"], [data-testid="stSpinner"] * { background: transparent; color: var(--ink); }
+[data-testid="stExpander"] summary { background: var(--card); }
 [data-testid="stExpander"] summary, [data-testid="stExpander"] summary * { color: var(--ink); }
+[data-testid="stExpanderDetails"] { background: var(--card); }
+[data-testid="stElementToolbarButtonContainer"] { background: var(--card); border: 1px solid var(--line); border-radius: 8px; }
+[data-testid="stElementToolbarButtonContainer"] * { color: var(--ink); }
 [data-testid="stSidebar"] * { color: var(--ink); }
 .stButton > button:disabled { opacity: .45; }
+[data-testid="stFileChip"] { background: var(--paper); border: 1px solid var(--line); }
+[data-testid="stFileChip"] *, [data-testid="stFileChipName"] { color: var(--ink); }
 header[data-testid="stHeader"], footer, #MainMenu, [data-testid="stToolbar"] { display: none !important; }
 .block-container { max-width: 1120px; padding: 2rem 1.5rem 4rem; }
 
@@ -95,7 +106,7 @@ header[data-testid="stHeader"], footer, #MainMenu, [data-testid="stToolbar"] { d
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: .7rem; margin: 0 0 1rem; }
 .tile { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: .7rem .9rem; }
 .tile b { display: block; font-family: var(--serif); font-size: 1.7rem; line-height: 1.15; color: var(--ink); }
-.tile span { font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.tile > span { font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
 .tile.good b { color: var(--green); }
 
 /* la grille */
@@ -127,6 +138,7 @@ header[data-testid="stHeader"], footer, #MainMenu, [data-testid="stToolbar"] { d
 .info dt { color: var(--muted); }
 .info dd { margin: 0; color: var(--ink); }
 .info code { background: var(--green-soft); color: var(--green); padding: .05em .4em; border-radius: 4px; font-size: .85em; }
+.info .info-chart { grid-column: 1 / -1; border-top: 1px solid var(--line); padding-top: 1rem; }
 .info .tiles { margin: 0; grid-template-columns: repeat(2, 1fr); }
 .info .tile b { font-size: 1.3rem; }
 @media (max-width: 760px) { .info { grid-template-columns: 1fr; } }
@@ -166,9 +178,93 @@ def load_pipeline(source: str, try_rotations: bool, repair: bool) -> SudokuPipel
 
 def css_html(theme: str) -> str:
     """Thème Auto : suit le système. Clair / Sombre : forcé, ce qui l'emporte sur la media query."""
-    css = CSS.replace("__LIGHT__", LIGHT_VARS).replace("__DARK__", DARK_VARS)
+    css = CSS.replace("</style>", charts.CHARTS_CSS + "</style>", 1)
+    css = css.replace("__LIGHT__", LIGHT_VARS).replace("__DARK__", DARK_VARS)
     forced = {"Clair": LIGHT_VARS, "Sombre": DARK_VARS}.get(theme)
-    return css + (f"<style>:root {{ {forced} }}</style>" if forced else "")
+    if forced:
+        css += f"<style>:root {{ {forced} }}</style>"
+    # Le tableau éditable est un canvas, que le CSS ne peut pas recolorer : en sombre on inverse ses couleurs
+    if theme == "Sombre":
+        css += f"<style>{DARK_TABLE}</style>"
+    elif theme == "Clair":
+        css += "<style>[data-testid=\"stDataFrame\"] { filter: none; }</style>"
+    else:
+        css += f"<style>@media (prefers-color-scheme: dark) {{ {DARK_TABLE} }}</style>"
+    return css
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def model_stats() -> dict[str, tuple[str, dict[str, float]]]:
+    """Dernières mesures MLflow de chaque modèle : {clé: (nom du run, métriques)}. Vide si MLflow est absent."""
+    if not (ROOT / "mlflow.db").exists():
+        return {}
+    try:
+        import mlflow
+
+        client = mlflow.MlflowClient(tracking_uri=TRACKING_URI)
+        out = {}
+        for key, name in (("cells", "digit_classification"), ("grid", "grid_detection"), ("pipeline", "pipeline_eval")):
+            exp = client.get_experiment_by_name(name)
+            runs = client.search_runs([exp.experiment_id], order_by=["attributes.start_time DESC"], max_results=1) if exp else []
+            if runs:
+                out[key] = (runs[0].info.run_name or "", dict(runs[0].data.metrics))
+        return out
+    except Exception:  # base verrouillée ou illisible : l'onglet l'indique, l'app continue
+        return {}
+
+
+def pick(metrics: dict[str, float], *names: str):
+    return next((metrics[n] for n in names if n in metrics), None)
+
+
+def models_html() -> str:
+    stats = model_stats()
+    if not stats:
+        return charts.panel("Modèles", '<p class="note">Pas de base MLflow (mlflow.db) à lire : les mesures des modèles '
+                            "ne sont pas disponibles ici.</p>")
+    cards = []
+    if "cells" in stats:
+        name, m = stats["cells"]
+        perfect = m["real_grids_perfect"] / m["real_grids_total"] if m.get("real_grids_total") else None
+        cards.append(charts.model_card_html(
+            "Classifieur de cases", f"YOLO11n-cls · {name}",
+            [("Cases réelles bien lues", pick(m, "real_cell_accuracy")), ("Chiffres bien lus", pick(m, "real_digit_accuracy")),
+             ("Cases vides bien lues", pick(m, "real_empty_accuracy")), ("Grilles lues sans erreur", perfect),
+             ("Validation (synthétique)", pick(m, "metrics/accuracy_top1"))],
+            "Mesuré sur les photos de test, jamais vues à l'entraînement."))
+    if "grid" in stats:
+        name, m = stats["grid"]
+        cards.append(charts.model_card_html(
+            "Détecteur de grille", f"YOLO11n · {name}",
+            [("mAP50", pick(m, "test_mAP50", "metrics/mAP50B")), ("mAP50-95", pick(m, "test_mAP50_95", "metrics/mAP50-95B")),
+             ("Précision", pick(m, "test_precision", "metrics/precisionB")), ("Rappel", pick(m, "test_recall", "metrics/recallB"))],
+            "mAP sur le jeu de test quand l'entraînement est fini, sur la validation sinon."))
+    if "pipeline" in stats:
+        name, m = stats["pipeline"]
+        rows = [(k.replace("_", " "), v) for k, v in sorted(m.items()) if 0 <= v <= 1][:8]
+        cards.append(charts.model_card_html("Pipeline complet", f"bout en bout · {name}", rows,
+                                            "Évaluation sur les photos de test (scripts/evaluate.py)."))
+    return "".join(cards)
+
+
+def show_dashboard(res, grid) -> None:
+    """Chiffres et graphiques sur la lecture, les temps et les modèles."""
+    st.subheader("Analyse")
+    tab_conf, tab_perf, tab_models = st.tabs(["Confiance de lecture", "Performances", "Modèles"])
+    with tab_conf:
+        mean = float(res.confidence.mean())
+        st.html(charts.panel("Confiance case par case", (
+            f'<div class="cols"><div>{charts.heatmap_html(res.confidence, res.raw_grid)}</div>'
+            f'<div>{charts.gauge_html(mean, "confiance moyenne")}{charts.histogram_html(res.confidence)}</div></div>'),
+            "Chaque case est lue par le classifieur, qui donne sa certitude. Les cases en jaune ou en rouge sont celles "
+            "à vérifier ; la hauteur des barres est en racine carrée."))
+    with tab_perf:
+        given = sum(v > 0 for row in grid for v in row)
+        cases = charts.donut_html([("chiffres imprimés", given, "c0"), ("à remplir", 81 - given, "c1")], "81", "cases")
+        st.html(f'<div class="cols"><div>{charts.panel("Temps par étape", charts.stack_html(timing_steps(res)))}</div>'
+                f'<div>{charts.panel("Les 81 cases", cases)}</div></div>')
+    with tab_models:
+        st.html(models_html())
 
 
 def to_rgb(image: np.ndarray) -> np.ndarray:
@@ -291,12 +387,40 @@ def measures(step: int, res, extra: dict) -> list[tuple[str, str]]:
     return [(str(sum(row.count(0) for row in res.grid)), "chiffres ajoutés"), (ms("total"), "temps total")]
 
 
+def timing_steps(res) -> list[tuple[str, float]]:
+    t = res.timings
+    return [("Détection", t.get("detect", 0)), ("Redressement", t.get("warp", 0)),
+            ("Lecture", t.get("classify", 0)), ("Résolution", t.get("solve", 0))]
+
+
+def step_chart_html(step: int, res, extra: dict) -> str:
+    """Le graphique qui illustre l'étape, sous le panneau d'infos."""
+    if step == 0 and res.bbox is not None:
+        return (f'<div class="cols">{charts.gauge_html(res.bbox_conf, "confiance YOLO")}'
+                '<p class="note">Part de certitude du détecteur sur le cadre trouvé. '
+                "Sous 25 %, le cadre est écarté et OpenCV cherche seul.</p></div>")
+    if step == 2:
+        return (f'<div class="cols"><div>{charts.heatmap_html(res.confidence, res.raw_grid)}</div>'
+                f'<div>{charts.histogram_html(res.confidence)}<p class="note">Confiance du classifieur sur les 81 cases '
+                "(hauteur des barres en racine carrée).</p></div></div>")
+    if step == 3 and extra:
+        kept = extra["tries"] - extra["undos"]
+        return charts.donut_html([("chiffres posés (définitifs)", kept, "c1"), ("hypothèses abandonnées", extra["undos"], "c3")],
+                                 str(extra["tries"]), "essais")
+    if step == 4:
+        return charts.stack_html(timing_steps(res))
+    return ""
+
+
 def info_html(step: int, res, extra: dict | None = None) -> str:
     model, flow, detail = STEP_INFO[step]
+    chart = step_chart_html(step, res, extra or {})
+    chart_html = f'<div class="info-chart">{chart}</div>' if chart else ""
     return (f'<div class="info"><div><h4>Sous le capot</h4><dl>'
             f'<dt>Technique</dt><dd>{model}</dd><dt>Entrée → sortie</dt><dd>{flow}</dd>'
             f'<dt>En détail</dt><dd>{detail}</dd></dl></div>'
-            f'<div><h4>Sur cette photo</h4>{tiles_html(measures(step, res, extra or {}), good_first=True)}</div></div>')
+            f'<div><h4>Sur cette photo</h4>{tiles_html(measures(step, res, extra or {}), good_first=True)}</div>'
+            f'{chart_html}</div>')
 
 
 SHORT_TITLES = ["Détection", "Redressement", "Lecture", "Résolution", "Résultat"]
@@ -313,7 +437,7 @@ def stepper_html(step: int, n_steps: int) -> str:
 
 def tiles_html(items: list[tuple[str, str]], good_first: bool = False) -> str:
     """Rangée de chiffres clés : (valeur, légende)."""
-    tiles = [f'<div class="tile{" good" if good_first and i == 0 else ""}"><b>{v}</b><span>{k}</span></div>'
+    tiles = [f'<div class="tile{" good" if good_first and i == 0 else ""}"><b>{charts.counter(v)}</b><span>{k}</span></div>'
              for i, (v, k) in enumerate(items)]
     return f'<div class="tiles">{"".join(tiles)}</div>'
 
@@ -559,6 +683,8 @@ def main() -> None:
             ok, jpeg = cv2.imencode(".jpg", solved_photo)
             if ok:
                 right.download_button("Télécharger la photo", jpeg.tobytes(), "sudoku_resolu.jpg", "image/jpeg")
+
+    show_dashboard(res, grid)
 
     with st.expander("Voir comment la photo a été lue"):
         col1, col2 = st.columns(2)
