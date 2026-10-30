@@ -523,28 +523,36 @@ def show_steps(image: np.ndarray, res, doubtful: set, fixed: set) -> None:
         if anim:
             time.sleep(seconds / speed)
 
+    # Chaque zone de l'étape est un emplacement réservé, créé d'entrée : Streamlit garde à l'écran les éléments de
+    # l'étape précédente, à la même position, tant que la nouvelle ne les a pas remplacés. Créer les emplacements
+    # vides en premier efface tout de suite l'ancienne étape, avant le début de l'animation.
+    head_slot, body_slot, info_slot, nav_slot = st.empty(), st.empty(), st.empty(), st.empty()
+
     extra: dict = {}
     title, text = STEPS[step]
-    st.subheader(title)
-    st.html(f'<p class="step-text">{text}</p>')
-    if step == 0:
-        step_detection(image, res, anim, pause)
-    elif step == 1:
-        step_warp(image, res, anim, pause)
-    elif step == 2:
-        step_reading(res, doubtful, fixed, anim, pause)
-    elif step == 3:
-        extra = step_solving(res, anim, pause)
-    else:
-        step_result(image, res, anim)
-    st.html(info_html(step, res, extra))
+    with head_slot.container():
+        st.subheader(title)
+        st.html(f'<p class="step-text">{text}</p>')
+    with body_slot.container():
+        if step == 0:
+            step_detection(image, res, anim, pause)
+        elif step == 1:
+            step_warp(image, res, anim, pause)
+        elif step == 2:
+            step_reading(res, doubtful, fixed, anim, pause)
+        elif step == 3:
+            extra = step_solving(res, anim, pause)
+        else:
+            step_result(image, res, anim)
+    info_slot.html(info_html(step, res, extra))
     st.session_state.played.add(step)
 
-    prev, again, nxt, _ = st.columns([1, 1, 1.4, 3])
-    prev.button("← Previous", on_click=go, args=(-1,), disabled=step == 0, width="stretch")
-    again.button("↻ Replay", on_click=replay, width="stretch")
-    if step < n_steps - 1:  # rien à suivre après la dernière étape
-        nxt.button("Next step →", on_click=go, args=(1,), type="primary", width="stretch")
+    with nav_slot.container():
+        prev, again, nxt, _ = st.columns([1, 1, 1.4, 3])
+        prev.button("← Previous", on_click=go, args=(-1,), disabled=step == 0, width="stretch")
+        again.button("↻ Replay", on_click=replay, width="stretch")
+        if step < n_steps - 1:  # rien à suivre après la dernière étape
+            nxt.button("Next step →", on_click=go, args=(1,), type="primary", width="stretch")
 
 
 def main() -> None:
