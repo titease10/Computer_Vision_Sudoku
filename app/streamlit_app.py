@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import os
 import sys
 import time
 from pathlib import Path
@@ -265,7 +266,8 @@ def main() -> None:
 
     with st.sidebar:
         st.subheader("Options de démo")
-        source = st.radio("Modèles", ["registry", "local"],
+        sources = ["registry", "local"]
+        source = st.radio("Modèles", sources, index=sources.index(os.environ.get("SUDOKU_MODEL_SOURCE", "registry")),
                           format_func=lambda s: "MLflow Registry (champion)" if s == "registry" else "Fichiers locaux")
         try_rotations = st.checkbox("Tester les 4 orientations", value=True,
                                     help="Sans cette option, une grille photographiée de côté est mal lue.")
