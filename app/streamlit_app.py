@@ -90,16 +90,12 @@ header[data-testid="stHeader"], footer, #MainMenu, [data-testid="stToolbar"] { d
 [data-testid="stImage"] img { border-radius: 12px; box-shadow: 0 2px 14px var(--shadow); }
 [data-testid="stExpander"] { border-radius: 12px; border-color: var(--line); background: var(--card); }
 
-/* indicateur d'étapes */
-.stepper { display: flex; gap: .5rem; margin: .4rem 0 1.1rem; flex-wrap: wrap; }
-.stepper .s { display: flex; align-items: center; gap: .5rem; padding: .35rem .85rem .35rem .4rem; border-radius: 999px;
-  border: 1px solid var(--line); background: var(--card); color: var(--muted); font-size: .88rem; }
-.stepper .n { width: 1.5rem; height: 1.5rem; border-radius: 50%; display: grid; place-items: center; font-size: .78rem;
-  background: var(--line); color: var(--muted); font-weight: 700; }
-.stepper .done .n { background: var(--green); color: #fff; }
-.stepper .done { color: var(--ink); }
-.stepper .on { border-color: var(--green); background: var(--green-soft); color: var(--green); font-weight: 600; }
-.stepper .on .n { background: var(--green); color: #fff; }
+/* étapes cliquables (st.pills) */
+[class*="st-key-stepper_"] { margin: .2rem 0 .9rem; }
+[class*="st-key-stepper_"] button { padding: .4rem 1.05rem; font-size: .9rem; transition: transform .15s ease, box-shadow .15s ease; }
+[class*="st-key-stepper_"] button:hover { transform: translateY(-2px); box-shadow: 0 4px 12px var(--shadow); }
+[class*="st-key-stepper_"] button[aria-checked="true"], [class*="st-key-stepper_"] button[aria-pressed="true"] {
+  animation: ring 1.8s ease-out infinite; }
 .step-text { color: var(--muted); margin: 0 0 1rem; }
 
 /* tuiles de chiffres clés */
@@ -130,12 +126,11 @@ header[data-testid="stHeader"], footer, #MainMenu, [data-testid="stToolbar"] { d
 /* animations */
 @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 @keyframes ring { 0% { box-shadow: 0 0 0 0 rgba(27,110,60,.45); } 100% { box-shadow: 0 0 0 9px rgba(27,110,60,0); } }
-.hero, .stepper, .step-text, .info, .tiles .tile { animation: rise .55s cubic-bezier(.2,.7,.2,1) both; }
+.hero, .step-text, .info, .tiles .tile { animation: rise .55s cubic-bezier(.2,.7,.2,1) both; }
 .tiles .tile:nth-child(2) { animation-delay: .07s; } .tiles .tile:nth-child(3) { animation-delay: .14s; }
 .tiles .tile:nth-child(4) { animation-delay: .21s; }
-.stepper .on .n { animation: ring 1.8s ease-out infinite; }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
-@media (max-width: 640px) { .hero { margin-top: 0; } .hero h1 { font-size: 2.1rem; } .stepper .t { display: none; } }
+@media (max-width: 640px) { .hero { margin-top: 0; } .hero h1 { font-size: 2.1rem; } }
 </style>
 """
 
@@ -384,13 +379,27 @@ def info_html(step: int, res, extra: dict | None = None) -> str:
 SHORT_TITLES = ["Detection", "Dewarping", "Reading", "Solving", "Result"]
 
 
-def stepper_html(step: int, n_steps: int) -> str:
-    pills = []
-    for i in range(n_steps):
-        state = "on" if i == step else "done" if i < step else ""
-        mark = "✓" if i < step else i + 1
-        pills.append(f'<div class="s {state}"><span class="n">{mark}</span><span class="t">{SHORT_TITLES[i]}</span></div>')
-    return f'<div class="stepper">{"".join(pills)}</div>'
+def step_label(i: int, current: int) -> str:
+    return f"✓ {SHORT_TITLES[i]}" if i < current else f"{i + 1} · {SHORT_TITLES[i]}"
+
+
+def stepper(current: int, n_steps: int) -> int:
+    """Les étapes, cliquables : renvoie celle qui est choisie.
+
+    La clé du widget contient l'étape courante : quand les boutons Previous / Next la changent, le widget
+    est recréé avec la bonne sélection au lieu de garder l'ancienne.
+    """
+    nonce = st.session_state.get("stepper_nonce", 0)
+    picked = st.pills("Step", list(range(n_steps)), default=current, selection_mode="single",
+                      format_func=lambda i: step_label(i, current), key=f"stepper_{current}_{nonce}",
+                      label_visibility="collapsed")
+    if picked is None:  # un clic sur l'étape active la désélectionne : on la remet
+        st.session_state.stepper_nonce = nonce + 1
+        st.rerun()
+    if picked != current:  # nouvelle étape : on relance pour que les coches et la sélection soient à jour
+        st.session_state.step = picked
+        st.rerun()
+    return picked
 
 
 def tiles_html(items: list[tuple[str, str]], good_first: bool = False) -> str:
@@ -505,8 +514,9 @@ def step_result(image, res, anim) -> None:
 def show_steps(image: np.ndarray, res, doubtful: set, fixed: set) -> None:
     """Les étapes du pipeline une par une ; l'animation d'une étape ne se joue qu'à sa première visite."""
     speed = st.sidebar.select_slider("Animation speed", [0.5, 1, 2, 4], value=1, format_func=lambda s: f"×{s}")
-    step = st.session_state.step
     n_steps = len(STEPS) if res.status == "solved" else 3
+    step = stepper(min(st.session_state.step, n_steps - 1), n_steps)
+    st.session_state.step = step
     anim = step not in st.session_state.played
 
     def pause(seconds: float) -> None:
@@ -515,7 +525,6 @@ def show_steps(image: np.ndarray, res, doubtful: set, fixed: set) -> None:
 
     extra: dict = {}
     title, text = STEPS[step]
-    st.html(stepper_html(step, n_steps))
     st.subheader(title)
     st.html(f'<p class="step-text">{text}</p>')
     if step == 0:
@@ -534,8 +543,8 @@ def show_steps(image: np.ndarray, res, doubtful: set, fixed: set) -> None:
     prev, again, nxt, _ = st.columns([1, 1, 1.4, 3])
     prev.button("← Previous", on_click=go, args=(-1,), disabled=step == 0, width="stretch")
     again.button("↻ Replay", on_click=replay, width="stretch")
-    nxt.button("Next step →", on_click=go, args=(1,), type="primary",
-               disabled=step >= n_steps - 1, width="stretch")
+    if step < n_steps - 1:  # rien à suivre après la dernière étape
+        nxt.button("Next step →", on_click=go, args=(1,), type="primary", width="stretch")
 
 
 def main() -> None:
