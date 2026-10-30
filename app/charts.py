@@ -86,6 +86,18 @@ CHARTS_CSS = r"""
 .mrow em { font-style: normal; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
 @media (max-width: 640px) { .mrow { grid-template-columns: 7rem 1fr 3.6rem; } }
 
+/* avertissement : grille corrigée */
+@keyframes wobble { 0%, 100% { transform: rotate(0); } 20% { transform: rotate(-12deg); } 40% { transform: rotate(10deg); }
+  60% { transform: rotate(-6deg); } 80% { transform: rotate(4deg); } }
+.warn { display: flex; gap: 1.1rem; align-items: flex-start; background: var(--amber); color: var(--ink);
+  border: 1px solid #E0A800; border-left: 10px solid #E0A800; border-radius: 14px; padding: 1.2rem 1.4rem; margin: 0 0 1.3rem;
+  animation: rise .55s cubic-bezier(.2,.7,.2,1) both; }
+.warn .icon { font-size: 2.4rem; line-height: 1; animation: wobble 1.2s ease .5s 2 both; transform-origin: 50% 80%; }
+.warn h3 { margin: 0 0 .35rem; font-family: var(--serif); font-size: 1.5rem; color: var(--ink); }
+.warn p { margin: 0; font-size: .95rem; }
+.warn ul { margin: .6rem 0 0; padding-left: 1.2rem; font-size: .92rem; }
+.warn li b { font-variant-numeric: tabular-nums; }
+
 /* onglets natifs */
 [data-baseweb="tab"] { color: var(--muted); }
 [data-baseweb="tab"][aria-selected="true"] { color: var(--green); }
@@ -105,6 +117,25 @@ def panel(title: str, body: str, note: str = "") -> str:
     head = f"<h4>{title}</h4>" if title else ""
     foot = f'<p class="note">{note}</p>' if note else ""
     return f'<div class="panel">{head}{body}{foot}</div>'
+
+
+def repair_banner_html(repaired: Sequence[tuple[int, int, int, int]]) -> str:
+    """Gros avertissement : la lecture n'était pas un sudoku valide et des cases ont été changées.
+
+    `repaired` : (ligne, colonne, valeur lue, valeur retenue), numérotées depuis 0 ; 0 = case vide.
+    """
+    if not repaired:
+        return ""
+    shown = lambda v: str(v) if v else "empty"
+    items = "".join(f"<li>row {r + 1}, column {c + 1}: <b>{shown(a)}</b> → <b>{shown(b)}</b></li>" for r, c, a, b in repaired)
+    n = len(repaired)
+    return ('<div class="warn" role="alert"><div class="icon">⚠️</div><div>'
+            f"<h3>This grid was corrected: the photo did not read as a valid sudoku</h3>"
+            "<p>As read, the grid was impossible: a digit appeared twice in a row, column or block, or the grid did not "
+            f"have exactly one solution. To make it solvable, {n} cell{'s were' if n > 1 else ' was'} changed to the "
+            "classifier’s next best guess. <b>Check the cells below against your paper grid</b>: "
+            "they are highlighted in orange.</p>"
+            f"<ul>{items}</ul></div></div>")
 
 
 def _tier(conf: float) -> str:

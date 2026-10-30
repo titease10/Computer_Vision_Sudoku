@@ -46,3 +46,13 @@ def test_css_has_no_angle_bracket():
     from charts import CHARTS_CSS
 
     assert "<" not in CHARTS_CSS
+
+
+def test_repair_banner_lists_changes_and_is_empty_without_repairs():
+    from charts import repair_banner_html
+
+    assert repair_banner_html([]) == ""
+    out = repair_banner_html([(2, 0, 5, 6), (4, 4, 0, 3)])
+    assert 'role="alert"' in out and "2 cells were changed" in out
+    assert "row 3, column 1: <b>5</b> → <b>6</b>" in out and "<b>empty</b> → <b>3</b>" in out
+    assert "1 cell was changed" in repair_banner_html([(0, 0, 1, 2)])
