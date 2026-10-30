@@ -1,35 +1,29 @@
-# Étape 4 — Lire les cases : classifieur YOLO-cls
+# 4. Lire les cases avec YOLO-cls
 
-Fichiers : `scripts/build_cells_dataset.py`, `scripts/train_cells.py`,
-`src/sudoku_cv/digit_classifier.py`, `src/sudoku_cv/pipeline.py`
+Code : `scripts/build_cells_dataset.py`, `scripts/train_cells.py`,
+`src/sudoku_cv/digit_classifier.py`, `src/sudoku_cv/pipeline.py`.
 
-## Formulation du problème
+Chaque case de 64×64 est classée parmi 10 classes : `0` pour vide, `1` à `9` pour les chiffres.
+« Vide » est une vraie classe, pas une règle de seuil : le modèle apprend ainsi à ignorer lui-même
+les chiffres fantômes du verso, les restes de traits et les taches.
 
-Chaque case 64×64 est classée parmi **10 classes** : `0` = case vide, `1`…`9` = chiffres.
-On traite « vide » comme une classe à part entière plutôt qu'avec une règle de seuil : le
-modèle apprend lui-même à ignorer les chiffres fantômes du verso, les restes de traits, les
-taches.
+Le modèle est `yolo11n-cls` (Ultralytics), pré-entraîné sur ImageNet, ~1,5 M de paramètres. C'est le
+plus petit de la famille : il s'entraîne sur CPU en ~20 min et classe 81 cases en une fraction de
+seconde.
 
-**Modèle :** `yolo11n-cls` (Ultralytics), pré-entraîné sur ImageNet, ~1,5 M de paramètres.
-Le plus petit de la famille : il s'entraîne sur CPU en ~20 min et classe 81 cases en une
-fraction de seconde.
-
-## Construction du dataset — `build_cells_dataset.py`
+## Le dataset
 
 | Classe | Source | Train | Val |
 |---|---|---|---|
-| 1-9 | 882 polices Chars74K (repo rg1990, sans les 134 exclues), **2 rendus** par image | 1 500 / classe | 264 / classe |
+| 1-9 | 882 polices Chars74K (repo rg1990, sans les 134 exclues), 2 rendus par image | 1 500 / classe | 264 / classe |
 | 0 (vide) | cases vides synthétiques | 1 500 | 264 |
-| 0 (vide) | **vraies cases vides** des photos d'entraînement | 1 019 | — |
-| **test** | **405 vraies cases** des photos 1, 4, 8, 19, 24, étiquetées à la main | | |
+| 0 (vide) | vraies cases vides des photos d'entraînement | 1 019 | — |
+| test (v1) | 405 vraies cases des photos 1, 4, 8, 19, 24, étiquetées à la main | | |
 
-### Rendre une police « comme une case photographiée »
+Les images Chars74K sont des chiffres noirs parfaits sur fond blanc, très loin d'une case
+photographiée. Pour réduire cet écart de domaine, chaque rendu tire au hasard :
 
-Les images Chars74K sont des chiffres noirs parfaits sur fond blanc, très différents d'une
-case photographiée. Sans adaptation, le modèle apprendrait sur des images qui ne
-ressemblent pas à celles qu'il verra (**écart de domaine**). Chaque rendu tire au hasard :
-
-| Effet | Imite |
+| Effet | Ce qu'il imite |
 |---|---|
 | fond gris 120-245 + dégradé linéaire | papier, éclairage inégal, ombre |
 | encre 0-110 (toujours ≥ 50 niveaux sous le fond) | encre noire, imprimée grise, encre colorée |
@@ -39,128 +33,96 @@ ressemblent pas à celles qu'il verra (**écart de domaine**). Chaque rendu tire
 | réduction à 14-32 px puis agrandissement (40 %) | photo lointaine, écran |
 | flou gaussien, bruit, compression JPEG | mise au point, capteur, compression |
 
-Montage (haut : synthétique, classes 0 à 9 ; bas : vraies cases de test ; dernière ligne :
-vraies cases vides) :
+En haut, le synthétique (classes 0 à 9) ; en bas, de vraies cases de test ; dernière ligne, de
+vraies cases vides :
 
 ![synthétique vs réel](img/cells_montage_synth_vs_reel.png)
 
-### Choix des augmentations d'Ultralytics
-
-Ultralytics ajoute ses propres augmentations. Deux ont été **désactivées** car elles changent
-la classe :
-
-- `fliplr` (miroir horizontal) : un 2 ou un 3 retourné n'est plus un chiffre valide ;
-- `erasing` (effacement aléatoire d'un rectangle) : peut effacer le chiffre et produire une
-  image « vide » étiquetée « chiffre ».
+On a désactivé deux augmentations d'Ultralytics qui changent la classe de l'image : `fliplr`, car un
+2 ou un 3 en miroir n'est plus un chiffre valide, et `erasing`, qui peut effacer le chiffre et donner
+une image vide étiquetée « chiffre ».
 
 ## Suivi avec MLflow
 
-- Stockage : `sqlite:///mlflow.db` (+ artefacts dans `mlruns/`), expérience
-  `digit_classification`.
-- Le script ouvre lui-même le run ; le callback MLflow d'Ultralytics s'y greffe et y écrit
-  les hyperparamètres, la loss et la précision à chaque époque, les poids et les graphiques.
-- On y ajoute ensuite **l'évaluation sur les vraies cases** (la mesure qui compte) : métriques
-  `real_*`, matrice de confusion `real_confusion.png`, liste des erreurs `real_errors.txt`.
-- Visualiser : `.venv/Scripts/mlflow ui --backend-store-uri sqlite:///mlflow.db`.
+Le stockage se fait dans `sqlite:///mlflow.db` (artefacts dans `mlruns/`), expérience
+`digit_classification`. Le script ouvre le run, et le callback MLflow d'Ultralytics y écrit les
+hyperparamètres, la loss et la précision à chaque époque, les poids et les graphiques. On y ajoute
+l'évaluation sur les vraies cases : métriques `real_*`, matrice de confusion `real_confusion.png`,
+liste des erreurs `real_errors.txt`. Pour les consulter :
+`.venv/Scripts/mlflow ui --backend-store-uri sqlite:///mlflow.db`.
 
-## Résultats — run `cells_v1`
+## Premier run : `cells_v1`
 
-Entraînement : 15 époques, batch 128, 64×64, CPU (≈ 75 s par époque, 19 min au total).
+15 époques, batch 128, 64×64, CPU (≈ 75 s par époque, 19 min au total).
 
 | Mesure | Valeur |
 |---|---|
 | Précision validation (synthétique, polices inconnues) | 99,28 % |
-| **Précision sur les vraies cases (405)** | **99,51 %** (2 erreurs) |
+| Précision sur les vraies cases (405) | 99,51 % (2 erreurs) |
 | … sur les chiffres (147) | 99,32 % |
 | … sur les vides (258) | 99,61 % |
-| **Grilles lues sans aucune erreur** | **3 / 5** |
-
-Matrice de confusion sur les vraies cases :
+| Grilles lues sans aucune erreur | 3 / 5 |
 
 ![confusion](img/cells_v1_confusion_reel.png)
 
-### Analyse des 2 erreurs
+Les deux erreurs ont des causes précises :
 
 ![erreurs](img/cells_v1_erreurs.png)
 
-*(gauche : photo 4, case (0,0) ; milieu : photo 24, case (8,2) ; droite : un 8 normal, pour
-comparaison)*
+*Gauche : photo 4, case (0,0). Milieu : photo 24, case (8,2). Droite : un 8 normal, pour comparer.*
 
-1. **Photo 4, case (0,0) — vide lue comme 7.** La case contient un **trait diagonal** : le
-   bord de la grille, courbé, mal corrigé dans le coin par le redressement (étape 3). Une
-   barre oblique ressemble au jambage d'un 7. Le dataset ne contient que des traits
-   horizontaux ou verticaux sur les bords.
-   *Cause : redressement imparfait dans un coin + aucun exemple de trait oblique.*
-2. **Photo 24, case (8,2) — 6 lu comme 8.** Chiffre **rouge sur écran, très flou**, la boucle
-   du haut du 6 est presque fermée. Le modèle n'a vu aucun vrai chiffre d'écran à
-   l'entraînement (seulement des vides réels).
-   *Cause : écart de domaine (flou d'écran) + aucune vraie case chiffre en train.*
+Sur la photo 4, une case vide est lue comme un 7. Elle contient un trait diagonal, le bord courbé de
+la grille mal corrigé dans le coin, et une barre oblique ressemble au jambage d'un 7. Le dataset ne
+contenait que des traits horizontaux ou verticaux.
 
-### Pourquoi 99,5 % ne suffit pas
+Sur la photo 24, un 6 est lu comme un 8. Il est rouge, sur écran, très flou, et sa boucle du haut est
+presque fermée. Le modèle n'avait vu aucun vrai chiffre d'écran à l'entraînement, seulement des vides
+réels.
 
-Une grille a 81 cases : avec 99,5 % par case, la probabilité de lire une grille sans erreur
-est 0,995⁸¹ ≈ **67 %**, ce qui correspond bien aux 3 grilles parfaites sur 5 observées.
-Pour atteindre 90 % de grilles parfaites, il faut ~99,9 % par case. D'où deux leviers :
-améliorer le modèle, **et** corriger les erreurs avec les règles du sudoku (étape pipeline).
+Et 99,5 % par case ne suffit pas : une grille a 81 cases, donc la probabilité de la lire sans erreur
+est 0,995⁸¹ ≈ 67 %, ce qui colle avec les 3 grilles parfaites sur 5. Pour 90 % de grilles parfaites,
+il faudrait ~99,9 % par case. D'où deux chantiers : améliorer le modèle, et corriger les erreurs avec
+les règles du sudoku (voir [doc 6](06_pipeline_evaluation.md)).
 
-## Pistes pour la v2
+Ce score était aussi mesuré sur 405 cases seulement, où une erreur vaut 0,25 point, et il était biaisé
+par une fuite de données ([doc 2](02_donnees.md)) : 6 photos d'entraînement montraient les mêmes
+grilles que le test.
 
-| Piste | Erreur visée |
-|---|---|
-| Cases vides synthétiques avec **traits obliques / courbes** | erreur 1 |
-| **Pré-étiqueter les 520 vraies cases remplies** avec v1, corriger à la main, les ajouter au train (dont les chiffres rouges des photos 23 et 25) | erreur 2, écart de domaine |
-| Plus de flou et de basse résolution dans les rendus | erreur 2 |
-| Correction par le solveur : si la grille lue est invalide ou insoluble, essayer le 2ᵉ choix des cases les moins sûres | les deux |
-| Améliorer le redressement des coins (étape 3) | erreur 1 |
+## v1_clean et v2, sur un test corrigé
 
-**Limite de l'évaluation :** 405 cases de 5 photos, c'est peu. Une erreur de plus ou de
-moins change la précision de 0,25 point. Il faudra élargir le jeu de test avec de nouvelles
-photos.
+Le nouveau test compte 11 photos et 891 cases, découpées par grille. On réentraîne d'abord la recette
+v1 à l'identique (`cells_v1_clean`), puis on ajoute les améliorations pour la v2, afin de pouvoir
+comparer les deux.
 
----
-
-## Correction de l'évaluation : fuite de données (voir `02_donnees.md`)
-
-Le test de `cells_v1` (5 photos) était biaisé : 6 photos d'entraînement montraient les
-mêmes grilles que le test. Nouveau découpage **par grille** : test = **11 photos, 891 cases**.
-Pour comparer proprement, on réentraîne la recette v1 sur le découpage propre
-(`cells_v1_clean`), puis on ne change **qu'une chose à la fois** pour la v2.
-
-## Résultats — v1_clean vs v2 (même test : 891 vraies cases, 11 photos)
-
-| Run | Recette | Val (synth., meilleure époque) | **Cases réelles** | Chiffres | Vides | Erreurs | **Grilles parfaites** |
+| Run | Recette | Val (synth., meilleure époque) | Cases réelles | Chiffres | Vides | Erreurs | Grilles parfaites |
 |---|---|---|---|---|---|---|---|
 | `cells_v1` *(fuite, pour info)* | polices + synthétique + vides réels | 99,28 % | 99,55 % | 99,68 % | 99,48 % | 4 | 8 / 11 |
 | `cells_v1_clean` | idem, découpage par grille | 99,24 % | 99,66 % | 99,68 % | 99,65 % | 3 | 8 / 11 |
-| **`cells_v2`** | + **vraies cases chiffres** (×3) + **traits obliques** dans les vides | 99,09 % | **99,78 %** | **100 %** | 99,65 % | **2** | **10 / 11** |
+| `cells_v2` | + vraies cases chiffres (×3) + traits obliques dans les vides | 99,09 % | 99,78 % | 100 % | 99,65 % | 2 | 10 / 11 |
 
-Lecture :
+Les vraies cases chiffres de la v2 sont les 520 cases remplies des photos d'entraînement, dont les
+chiffres rouges des photos 23 et 25, pré-étiquetées par `cells_v1` puis vérifiées. Les deux erreurs
+visées ont disparu, et tous les vrais chiffres du test sont bien lus.
 
-- **Les deux erreurs visées sont corrigées** : le trait oblique de la photo 4 (plus lu comme
-  un 7) et le 6 rouge flou de la photo 24 (plus lu comme un 8). **100 % des chiffres** réels
-  sont bien lus.
-- La précision de **validation baisse légèrement** (99,24 → 99,09 %) alors que le **test réel
-  progresse** : la validation est synthétique ; ajouter des vraies cases rapproche le modèle
-  des vraies photos, pas des images synthétiques. C'est la preuve qu'il faut juger sur des
-  **données réelles** et pas sur la validation synthétique.
-- Avec 1 à 2 erreurs d'écart, les différences entre runs sont **petites en valeur absolue** :
-  sur 891 cases, une erreur = 0,11 point. La conclusion « v2 > v1_clean » est cohérente avec
-  l'analyse des erreurs (chaque erreur corrigée l'est pour la raison visée), mais un test plus
-  grand serait nécessaire pour la chiffrer finement.
+La validation baisse un peu (99,24 → 99,09 %) alors que le test réel monte. La validation est
+synthétique, et ajouter de vraies cases rapproche le modèle des photos, pas des images synthétiques.
+On a donc jugé sur le réel.
+
+Il faut rester prudent sur l'écart : sur 891 cases, une erreur vaut 0,11 point, et les runs ne
+diffèrent que de 1 ou 2 erreurs. La v2 paraît meilleure parce que chaque erreur corrigée l'est pour la
+raison visée, mais il faudrait un test plus grand pour chiffrer le gain.
 
 ![confusion v2](img/cells_v2_confusion_reel.png)
 
-## Les 2 erreurs restantes de v2 : un problème de redressement, pas de lecture
+## Les 2 erreurs restantes de la v2
 
 ![erreurs v2](img/cells_v2_erreurs.png)
 
-*(photo 18, cases (0,0) et (1,0), lues « 1 » ; à droite un vrai 1)*
+*Photo 18, cases (0,0) et (1,0), lues « 1 ». À droite, un vrai 1.*
 
-Ces deux cases contiennent le **bord extérieur de la grille** : sur la photo 18 (page
-courbée), le coin haut-gauche est mal aligné et la colonne de gauche est décalée. Un trait
-vertical au milieu d'une case ressemble effectivement à un 1 : le classifieur n'a pas « tort »
-au vu de l'image. Le correctif est en amont (étape 3 : redressement / coins fournis par YOLO)
-ou en aval : deux « 1 » dans la même colonne et le même bloc créent un **doublon**, que la
-correction par les règles du sudoku (étape pipeline) pourra détecter et réparer.
+Ces cases contiennent le bord extérieur de la grille : la page est courbée, le coin haut-gauche est
+mal aligné et la colonne de gauche est décalée. Un trait vertical au milieu d'une case ressemble
+vraiment à un 1, et le problème vient du redressement plutôt que du classifieur. Comme deux « 1 » dans
+la même colonne font un doublon, la réparation par les règles peut les corriger.
 
-**Modèle retenu pour la suite : `cells_v2`** (`runs/cells/cells_v2/weights/best.pt`).
+Modèle retenu : `cells_v2` (`runs/cells/cells_v2/weights/best.pt`).
