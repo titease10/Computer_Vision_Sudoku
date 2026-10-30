@@ -109,22 +109,6 @@ header[data-testid="stHeader"], footer, #MainMenu, [data-testid="stToolbar"] { d
 .tile > span { font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
 .tile.good b { color: var(--green); }
 
-/* la grille */
-.board {
-  display: grid; box-sizing: border-box; aspect-ratio: 1; width: 100%; max-width: 440px; overflow: hidden;
-  grid-template-columns: repeat(9, minmax(0, 1fr)); grid-template-rows: repeat(9, minmax(0, 1fr));
-  border: 2px solid var(--ink); border-radius: 10px; background: var(--card);
-  box-shadow: 0 6px 22px var(--shadow);
-  font-family: var(--serif); font-size: clamp(1rem, 4.2vw, 1.5rem); font-variant-numeric: tabular-nums;
-}
-.board div { box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 1px solid var(--line); }
-.board div:nth-child(9n+3), .board div:nth-child(9n+6) { border-right: 2px solid var(--ink); }
-.board div:nth-child(n+19):nth-child(-n+27), .board div:nth-child(n+46):nth-child(-n+54) { border-bottom: 2px solid var(--ink); }
-.board .found { color: var(--green); font-weight: 700; }
-.board .doubt { background: var(--amber); }
-.board .fixed { background: var(--rose); }
-.board .try { background: var(--blue); }
-.board .undo { background: var(--red); }
 .legend { font-size: .85rem; color: var(--muted); margin-top: .7rem; }
 .legend b { font-weight: normal; padding: .1em .5em; border-radius: 4px; }
 .legend .l-found { color: var(--green); font-weight: 700; }
@@ -145,13 +129,11 @@ header[data-testid="stHeader"], footer, #MainMenu, [data-testid="stToolbar"] { d
 
 /* animations */
 @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
-@keyframes pop { 0% { opacity: 0; transform: scale(.3); } 70% { transform: scale(1.18); } 100% { opacity: 1; transform: scale(1); } }
 @keyframes ring { 0% { box-shadow: 0 0 0 0 rgba(27,110,60,.45); } 100% { box-shadow: 0 0 0 9px rgba(27,110,60,0); } }
 .hero, .stepper, .step-text, .info, .tiles .tile { animation: rise .55s cubic-bezier(.2,.7,.2,1) both; }
 .tiles .tile:nth-child(2) { animation-delay: .07s; } .tiles .tile:nth-child(3) { animation-delay: .14s; }
 .tiles .tile:nth-child(4) { animation-delay: .21s; }
 .stepper .on .n { animation: ring 1.8s ease-out infinite; }
-.board.pop .found { animation: pop .4s cubic-bezier(.3,1.4,.5,1) both; animation-delay: calc(var(--i) * 14ms); }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 @media (max-width: 640px) { .hero { margin-top: 0; } .hero h1 { font-size: 2.1rem; } .stepper .t { display: none; } }
 </style>
@@ -289,31 +271,6 @@ def draw_detection(image: np.ndarray, res, n_lines: int = 20, with_bbox: bool = 
             if 10 + k < n_lines:
                 cv2.polylines(out, [np.ascontiguousarray(pts[:, k]).reshape(-1, 1, 2)], False, (0, 140, 255), thick)
     return out
-
-
-def board_html(grid: list[list[int]], solution, doubtful: set, fixed: set, marks: dict | None = None,
-               pop: bool = False) -> str:
-    """La grille dessinée : chiffres lus en noir, chiffres trouvés en vert, cases à vérifier surlignées.
-
-    `marks` ({(ligne, col): classe CSS}) surligne des cases pendant les animations ;
-    `pop` fait apparaître les chiffres trouvés un à un.
-    """
-    marks = marks or {}
-    cells = []
-    for r in range(9):
-        for c in range(9):
-            value = grid[r][c] or (solution[r][c] if solution else 0) or ""
-            classes = []
-            if not grid[r][c] and value:
-                classes.append("found")
-            if (r, c) in marks:
-                classes.append(marks[(r, c)])
-            elif (r, c) in fixed:
-                classes.append("fixed")
-            elif (r, c) in doubtful:
-                classes.append("doubt")
-            cells.append(f'<div class="{" ".join(classes)}" style="--i:{r * 9 + c}">{value}</div>')
-    return f'<div class="board{" pop" if pop else ""}">{"".join(cells)}</div>'
 
 
 def legend_html(solved: bool, has_doubt: bool, has_fixed: bool) -> str:
@@ -498,11 +455,11 @@ def step_reading(res, doubtful, fixed, anim, pause) -> None:
                 p2 = (int((c + 1) * cell), int((r + 1) * cell))
                 cv2.rectangle(out, p1, p2, (255, 120, 0), max(2, res.flat.shape[0] // 150))
                 flat_slot.image(to_rgb(out), width="stretch")
-                board_slot.html(board_html(read, None, set(), set(), {(r, c): "try"}))
+                board_slot.html(charts.board_html(read, None, set(), set(), {(r, c): "try"}))
                 pause(0.03)
     flat_slot.image(to_rgb(res.flat), width="stretch")
     grid = res.grid if res.grid is not None else res.raw_grid
-    board_slot.html(board_html(grid, None, doubtful, fixed) + legend_html(False, bool(doubtful), bool(fixed)))
+    board_slot.html(charts.board_html(grid, None, doubtful, fixed) + legend_html(False, bool(doubtful), bool(fixed)))
     show_repair_banner(res.repaired, banner)
     if res.status != "solved":
         right.error("This reading does not give a solvable grid. Switch to “Full solution” "
@@ -524,10 +481,10 @@ def step_solving(res, anim, pause) -> dict:
             n_try += kind == "try"
             n_undo += kind == "undo"
             if i % stride == 0:
-                board_slot.html(board_html(res.grid, cur, set(), set(), {(r, c): kind}))
+                board_slot.html(charts.board_html(res.grid, cur, set(), set(), {(r, c): kind}))
                 stats.markdown(f"**{n_try}** tries · **{n_undo}** backtracks")
                 pause(0.06)
-    board_slot.html(board_html(res.grid, res.solution, set(), set(), pop=anim))
+    board_slot.html(charts.board_html(res.grid, res.solution, set(), set(), pop=anim))
     stats.markdown(f"**{tries}** tries · **{undos}** backtracks")
     right.caption("Each backtrack is an abandoned guess: the harder the grid, the more there are.")
     return {"tries": tries, "undos": undos}
@@ -539,7 +496,7 @@ def step_result(image, res, anim) -> None:
     left, right = st.columns([3, 2], gap="large")
     left.image(to_rgb(solved_photo), width="stretch")
     right.html(timing_tiles(res, sum(row.count(0) for row in res.grid)))
-    right.html(board_html(res.grid, res.solution, set(), set(), pop=anim) + legend_html(True, False, False))
+    right.html(charts.board_html(res.grid, res.solution, set(), set(), pop=anim) + legend_html(True, False, False))
     ok, jpeg = cv2.imencode(".jpg", solved_photo)
     if ok:
         right.download_button("Download the photo", jpeg.tobytes(), "sudoku_solved.jpg", "image/jpeg")
@@ -679,7 +636,7 @@ def main() -> None:
             if count_solutions(grid) > 1:
                 right.warning("This grid has several solutions, so this one may not be the one in the paper. "
                               "A cell is probably misread.")
-        right.html(board_html(grid, shown.solution, doubtful, fixed)
+        right.html(charts.board_html(grid, shown.solution, doubtful, fixed)
                    + legend_html(shown.solution is not None, bool(doubtful), bool(fixed)))
         if shown.solution is not None:
             ok, jpeg = cv2.imencode(".jpg", solved_photo)
