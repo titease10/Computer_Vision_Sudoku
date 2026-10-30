@@ -29,28 +29,89 @@ LOW_CONF = 0.8  # en dessous, la case est signalée comme douteuse
 
 CSS = """
 <style>
-.block-container { max-width: 1080px; padding-top: 2.5rem; }
-h1 { font-size: 2.1rem !important; padding-bottom: 0 !important; }
-.board {
-  display: grid; box-sizing: border-box; aspect-ratio: 1; width: 100%; max-width: 432px;
-  grid-template-columns: repeat(9, minmax(0, 1fr)); grid-template-rows: repeat(9, minmax(0, 1fr));
-  border: 2px solid #1F1D1A; background: #FFFEFA;
-  font-size: clamp(1rem, 4.2vw, 1.4rem); font-variant-numeric: tabular-nums;
+:root {
+  --ink: #1F1D1A; --muted: #6A665C; --line: #E3DFD2; --paper: #FAF8F3; --card: #FFFEFA;
+  --green: #1B6E3C; --green-soft: #E4F0E8; --amber: #F6E3B4; --rose: #F3CDBB;
+  --blue: #CFE3F6; --red: #F2B8B5; --serif: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
 }
-.board div { box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 1px solid #CFCBBF; }
-.board div:nth-child(9n+3), .board div:nth-child(9n+6) { border-right: 2px solid #1F1D1A; }
-.board div:nth-child(n+19):nth-child(-n+27), .board div:nth-child(n+46):nth-child(-n+54) { border-bottom: 2px solid #1F1D1A; }
-.board .found { color: #1B6E3C; }
-.board .doubt { background: #F6E3B4; }
-.board .fixed { background: #F3CDBB; }
-.board .try { background: #CFE3F6; }
-.board .undo { background: #F2B8B5; }
-.legend { font-size: .85rem; color: #6A665C; margin-top: .5rem; }
-.legend b { font-weight: normal; padding: 0 .35em; }
-.legend .l-found { color: #1B6E3C; }
-.legend .l-doubt { background: #F6E3B4; }
-.legend .l-fixed { background: #F3CDBB; }
+header[data-testid="stHeader"], footer, #MainMenu, [data-testid="stToolbar"] { display: none !important; }
+.block-container { max-width: 1120px; padding: 2rem 1.5rem 4rem; }
+
+/* en-tête */
+.hero { padding: 1.2rem 0 1.6rem; border-bottom: 1px solid var(--line); margin-bottom: 1.6rem; }
+.hero .kicker { font-size: .78rem; letter-spacing: .14em; text-transform: uppercase; color: var(--green); font-weight: 600; }
+.hero h1 { font-family: var(--serif); font-size: 2.8rem; line-height: 1.1; margin: .25rem 0 .5rem; color: var(--ink); }
+.hero p { font-size: 1.05rem; color: var(--muted); margin: 0; max-width: 40rem; }
+.hero .tags { margin-top: .9rem; display: flex; flex-wrap: wrap; gap: .4rem; }
+.hero .tags span { font-size: .78rem; padding: .18rem .65rem; border-radius: 999px; background: var(--green-soft); color: var(--green); }
+
+/* zone d'upload et boutons */
+[data-testid="stFileUploaderDropzone"] {
+  border: 2px dashed #C9C3B2; border-radius: 14px; background: var(--card); padding: 2rem 1rem;
+  transition: border-color .15s, background .15s;
+}
+[data-testid="stFileUploaderDropzone"]:hover { border-color: var(--green); background: var(--green-soft); }
+.stButton > button, .stDownloadButton > button {
+  border-radius: 10px; border: 1px solid var(--line); font-weight: 600; transition: transform .1s, box-shadow .15s;
+}
+.stButton > button:hover, .stDownloadButton > button:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(31,29,26,.12); }
+.stButton > button[kind="primary"] { background: var(--green); border-color: var(--green); color: #fff; }
+[data-testid="stImage"] img { border-radius: 12px; box-shadow: 0 2px 14px rgba(31,29,26,.12); }
+[data-testid="stExpander"] { border-radius: 12px; border-color: var(--line); background: var(--card); }
+
+/* indicateur d'étapes */
+.stepper { display: flex; gap: .5rem; margin: .4rem 0 1.1rem; flex-wrap: wrap; }
+.stepper .s { display: flex; align-items: center; gap: .5rem; padding: .35rem .85rem .35rem .4rem; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--card); color: var(--muted); font-size: .88rem; }
+.stepper .n { width: 1.5rem; height: 1.5rem; border-radius: 50%; display: grid; place-items: center; font-size: .78rem;
+  background: var(--line); color: var(--muted); font-weight: 700; }
+.stepper .done .n { background: var(--green); color: #fff; }
+.stepper .done { color: var(--ink); }
+.stepper .on { border-color: var(--green); background: var(--green-soft); color: var(--green); font-weight: 600; }
+.stepper .on .n { background: var(--green); color: #fff; }
+.step-text { color: var(--muted); margin: 0 0 1rem; }
+
+/* tuiles de chiffres clés */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: .7rem; margin: 0 0 1rem; }
+.tile { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: .7rem .9rem; }
+.tile b { display: block; font-family: var(--serif); font-size: 1.7rem; line-height: 1.15; color: var(--ink); }
+.tile span { font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.tile.good b { color: var(--green); }
+
+/* la grille */
+.board {
+  display: grid; box-sizing: border-box; aspect-ratio: 1; width: 100%; max-width: 440px; overflow: hidden;
+  grid-template-columns: repeat(9, minmax(0, 1fr)); grid-template-rows: repeat(9, minmax(0, 1fr));
+  border: 2px solid var(--ink); border-radius: 10px; background: var(--card);
+  box-shadow: 0 6px 22px rgba(31,29,26,.14);
+  font-family: var(--serif); font-size: clamp(1rem, 4.2vw, 1.5rem); font-variant-numeric: tabular-nums;
+}
+.board div { box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 1px solid var(--line); }
+.board div:nth-child(9n+3), .board div:nth-child(9n+6) { border-right: 2px solid var(--ink); }
+.board div:nth-child(n+19):nth-child(-n+27), .board div:nth-child(n+46):nth-child(-n+54) { border-bottom: 2px solid var(--ink); }
+.board .found { color: var(--green); font-weight: 700; }
+.board .doubt { background: var(--amber); }
+.board .fixed { background: var(--rose); }
+.board .try { background: var(--blue); }
+.board .undo { background: var(--red); }
+.legend { font-size: .85rem; color: var(--muted); margin-top: .7rem; }
+.legend b { font-weight: normal; padding: .1em .5em; border-radius: 4px; }
+.legend .l-found { color: var(--green); font-weight: 700; }
+.legend .l-doubt { background: var(--amber); }
+.legend .l-fixed { background: var(--rose); }
+@media (max-width: 640px) { .hero h1 { font-size: 2.1rem; } .stepper .t { display: none; } }
 </style>
+"""
+
+
+HERO = """
+<div class="hero">
+  <div class="kicker">Vision par ordinateur</div>
+  <h1>Sudoku papier</h1>
+  <p>Prenez la grille en photo : les chiffres manquants s'écrivent dessus, directement sur le papier.</p>
+  <div class="tags"><span>YOLO · détection</span><span>OpenCV · redressement</span>
+  <span>YOLO-cls · lecture</span><span>Backtracking · résolution</span></div>
+</div>
 """
 
 
@@ -261,8 +322,7 @@ def show_steps(image: np.ndarray, res, doubtful: set, fixed: set) -> None:
 def main() -> None:
     st.set_page_config(page_title="Sudoku papier", initial_sidebar_state="collapsed", layout="wide")
     st.html(CSS)
-    st.title("Sudoku papier")
-    st.write("Prenez la grille en photo : les chiffres manquants s'écrivent dessus.")
+    st.html(HERO)
 
     with st.sidebar:
         st.subheader("Options de démo")
