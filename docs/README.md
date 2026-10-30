@@ -5,17 +5,18 @@ garde le détail de chaque étape : ce qu'on a essayé, les mesures, et ce qui n
 
 Pour une première lecture, le plus parlant est le [journal](journal.md), écrit au fil du projet.
 
-| Document | Sujet |
-|---|---|
-| [00_note_de_cadrage.md](00_note_de_cadrage.md) | Note de cadrage (rendu du 30 octobre) |
-| [journal.md](journal.md) | Pistes explorées, problèmes et décisions, dans l'ordre |
-| [01_solveur.md](01_solveur.md) | Résolution de la grille (backtracking + MRV) |
-| [02_donnees.md](02_donnees.md) | Sources de données, vérité terrain, découpage train/val/test |
-| [03_redressement.md](03_redressement.md) | Coins de la grille, redressement, pages courbées, découpage en cases |
-| [04_classifieur_chiffres.md](04_classifieur_chiffres.md) | Lecture des cases avec YOLO-cls, dataset synthétique, MLflow |
-| [05_detection_grille.md](05_detection_grille.md) | Détection de la grille avec YOLO detect |
-| [06_pipeline_evaluation.md](06_pipeline_evaluation.md) | Pipeline complet, orientation, réparation, évaluation, Model Registry |
-| [07_application.md](07_application.md) | Application Streamlit |
+| # | Document | Contenu |
+|---|---|---|
+| 0 | [00_note_de_cadrage.md](00_note_de_cadrage.md) | Note de cadrage (rendu du 30 octobre) |
+| — | [journal.md](journal.md) | Journal chronologique : pistes explorées, problèmes, décisions |
+| 1 | [01_solveur.md](01_solveur.md) | Résolution du sudoku (backtracking + MRV) |
+| 2 | [02_donnees.md](02_donnees.md) | Sources de données, vérité terrain, découpage train/val/test |
+| 3 | [03_redressement.md](03_redressement.md) | Localisation de la grille, redressement, pages courbées, découpage en cases |
+| 4 | [04_classifieur_chiffres.md](04_classifieur_chiffres.md) | Lecture des cases avec YOLO-cls, dataset synthétique, MLflow |
+| 5 | [05_detection_grille.md](05_detection_grille.md) | Détection de la grille avec YOLO detect : datasets, découpage, pièges, résultats |
+| 6 | [06_pipeline_evaluation.md](06_pipeline_evaluation.md) | Pipeline complet, orientation, réparation, évaluation de bout en bout, Model Registry |
+| 7 | [07_application.md](07_application.md) | Application Streamlit (photo ou caméra, grille modifiable) |
+| 8 | [08_explication_complete.md](08_explication_complete.md) | Explication de chaque étape : fonctionnement, notions, fonctions appelées, limites, glossaire |
 
 ## Le pipeline
 
