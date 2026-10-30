@@ -17,7 +17,19 @@ SCRIPT = r"""
   const W = 720, H = 460, TAU = Math.PI * 2, MONO = 'ui-monospace,Consolas,monospace';
   const START_TIME = 25, MAX_TIME = 30, MISS_COST = 2.5, HIT_GAIN = .5, TOP = 84;
   const FONTS = ['Georgia,serif', 'Arial,Helvetica,sans-serif', '"Courier New",monospace', 'Impact,Haettenschweiler,sans-serif',
-    '"Times New Roman",serif', '"Trebuchet MS",sans-serif', 'Verdana,sans-serif', '"Palatino Linotype",serif', '"Comic Sans MS",cursive'];
+    '"Times New Roman",serif', '"Trebuchet MS",sans-serif', 'Verdana,sans-serif', '"Palatino Linotype",serif', '"Comic Sans MS","Comic Neue",cursive'];
+  const WEIRD_FONTS = ['"Brush Script MT","Segoe Script","Snell Roundhand",cursive', '"Jokerman","Chiller","Papyrus",fantasy',
+    '"Old English Text MT","Blackadder ITC","UnifrakturCook",fantasy', '"Bauhaus 93","Broadway","Playbill",fantasy', '"Stencil","Stencil Std","Impact",fantasy',
+    '"Ink Free","Bradley Hand","Marker Felt",cursive', '"Gabriola","Zapfino","Edwardian Script ITC",cursive', '"Curlz MT","Ravie","Snap ITC","Harlow Solid Italic",fantasy',
+    '"Copperplate","Copperplate Gothic Bold","Algerian",fantasy', '"Showcard Gothic","Magneto","Gigi",fantasy', 'fantasy', 'cursive'];
+  const STYLES = ['outline', 'dashed', 'seg7', 'dots', 'pixel', 'sliced', 'wave', 'split', 'extrude', 'tiny', 'holes', 'seg7', 'dots', 'pixel', 'sliced'];
+  const DOT = { 1: ['..#..', '.##..', '..#..', '..#..', '..#..', '..#..', '.###.'], 2: ['.###.', '#...#', '....#', '...#.', '..#..', '.#...', '#####'],
+    3: ['#####', '...#.', '..#..', '...#.', '....#', '#...#', '.###.'], 4: ['...#.', '..##.', '.#.#.', '#..#.', '#####', '...#.', '...#.'],
+    5: ['#####', '#....', '####.', '....#', '....#', '#...#', '.###.'], 6: ['..##.', '.#...', '#....', '####.', '#...#', '#...#', '.###.'],
+    7: ['#####', '....#', '...#.', '..#..', '.#...', '.#...', '.#...'], 8: ['.###.', '#...#', '#...#', '.###.', '#...#', '#...#', '.###.'],
+    9: ['.###.', '#...#', '#...#', '.####', '....#', '...#.', '.##..'] };
+  const SEG = { 1: 'bc', 2: 'abged', 3: 'abgcd', 4: 'fgbc', 5: 'afgcd', 6: 'afgedc', 7: 'abc', 8: 'abcdefg', 9: 'abcdfg' };
+  const SEGXY = { a: [.2, .12, .8, .12], b: [.8, .12, .8, .5], c: [.8, .5, .8, .88], d: [.2, .88, .8, .88], e: [.2, .5, .2, .88], f: [.2, .12, .2, .5], g: [.2, .5, .8, .5] };
   const SIMILAR = { 1: [7, 4, 2], 2: [7, 3, 5], 3: [8, 5, 2], 4: [9, 1, 7], 5: [6, 3, 8], 6: [9, 5, 8], 7: [1, 9, 2], 8: [3, 6, 9], 9: [6, 4, 7] };
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const pickOf = (a) => a[Math.floor(Math.random() * a.length)];
@@ -125,6 +137,82 @@ SCRIPT = r"""
     sfx.over();
   }
 
+  // ---------- les chiffres : dessinés une fois par manche, avec un « budget de dégâts » qui monte avec le niveau ----------
+  const mk = (n) => { const c = D.createElement('canvas'); c.width = c.height = n; return c; };
+
+  function baseGlyph(style, digit, font, color, S, weight, italic) {
+    const cv = mk(S), c = cv.getContext('2d'), txt = String(digit), r = Math.random;
+    c.fillStyle = color; c.strokeStyle = color; c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineJoin = 'round'; c.lineCap = 'round';
+    const f = (size) => (italic ? 'italic ' : '') + weight + ' ' + Math.round(size) + 'px ' + font, y0 = S / 2 + S * .03;
+    if (style === 'outline' || style === 'dashed') {
+      c.font = f(S * .82); c.lineWidth = S * (style === 'outline' ? .04 : .05);
+      if (style === 'dashed') c.setLineDash([S * .06, S * .05]);
+      c.strokeText(txt, S / 2, y0);
+    } else if (style === 'seg7') {
+      c.lineWidth = S * .1;
+      for (const k of 'abcdefg') {
+        const [x1, y1, x2, y2] = SEGXY[k]; c.globalAlpha = SEG[digit].includes(k) ? 1 : .1;
+        c.beginPath(); c.moveTo(S * x1, S * y1); c.lineTo(S * x2, S * y2); c.stroke();
+      }
+    } else if (style === 'dots') {
+      const bm = DOT[digit], cell = S * .13, ox = S / 2 - 2.5 * cell, oy = S / 2 - 3.5 * cell;
+      bm.forEach((row, ry) => [...row].forEach((ch, cx) => { c.globalAlpha = ch === '#' ? 1 : .09; c.beginPath(); c.arc(ox + (cx + .5) * cell, oy + (ry + .5) * cell, cell * .4, 0, TAU); c.fill(); }));
+    } else if (style === 'pixel') {
+      const n = 10 + Math.floor(r() * 4), t = mk(n), tc = t.getContext('2d');
+      tc.fillStyle = color; tc.textAlign = 'center'; tc.textBaseline = 'middle'; tc.font = (italic ? 'italic ' : '') + weight + ' ' + Math.round(n * .95) + 'px ' + font; tc.fillText(txt, n / 2, n / 2 + .5);
+      c.imageSmoothingEnabled = false; c.drawImage(t, 0, 0, S, S);
+    } else if (style === 'sliced') {
+      c.font = f(S * .8); const n = 8 + Math.floor(r() * 4);
+      for (let i = 0; i < n; i++) { c.save(); c.beginPath(); c.rect(0, i * S / n, S, S / n + 1); c.clip(); c.fillText(txt, S / 2 + (r() - .5) * S * .24, y0); c.restore(); }
+    } else if (style === 'wave') {
+      c.font = f(S * .8); const n = 14, w = S / n, ph = r() * TAU;
+      for (let i = 0; i < n; i++) { c.save(); c.beginPath(); c.rect(i * w, 0, w + 1, S); c.clip(); c.fillText(txt, S / 2, y0 + Math.sin(i * .9 + ph) * S * .09); c.restore(); }
+    } else if (style === 'split') {
+      c.font = f(S * .8); c.globalCompositeOperation = 'lighter';
+      [['#ff3b3b', -S * .04], ['#3bff6b', 0], ['#3b7bff', S * .04]].forEach(([col, dx]) => { c.fillStyle = col; c.fillText(txt, S / 2 + dx, y0); });
+    } else if (style === 'extrude') {
+      c.font = f(S * .74); c.fillStyle = '#4f7a6a';
+      for (let k = 9; k >= 1; k--) c.fillText(txt, S / 2 + k * S * .012, y0 + k * S * .012);
+      c.fillStyle = color; c.fillText(txt, S / 2 - S * .03, y0 - S * .01);
+    } else if (style === 'tiny') {
+      c.font = f(S * .38); c.fillText(txt, S / 2 + (r() - .5) * S * .4, S / 2 + (r() - .5) * S * .4);
+    } else { c.font = f(S * .8); c.fillText(txt, S / 2, y0); }
+    return cv;
+  }
+
+  function makeGlyph(digit, rd) {
+    const S = 96, rnd = Math.random, wild = Math.min(.92, .22 + .08 * rd), cap = Math.min(3.9, 1.2 + .28 * rd);
+    const weird = rnd() < wild, style = weird ? pickOf(STYLES) : 'plain';
+    const font = pickOf(weird && rnd() < Math.min(.15 * rd, .8) ? WEIRD_FONTS : FONTS), weight = rnd() < .5 ? 'bold' : 'normal', italic = rnd() < .25;
+    const q = { rot: (rnd() - .5) * 2 * Math.min(8 + 5 * rd, 55) * Math.PI / 180, shear: (rnd() - .5) * 2 * Math.min(.06 * rd, .5),
+      sx: 1 + (rnd() - .5) * Math.min(.09 * rd, .75), sy: 1 + (rnd() - .5) * Math.min(.06 * rd, .5), blur: rnd() < .5 ? rnd() * Math.min(.22 * rd, 2.2) : 0,
+      lowc: rd >= 4 && rnd() < .35 ? .25 + rnd() * Math.min(.05 * rd, .35) : 0, dots: rnd() < .7 ? Math.floor(rnd() * Math.min(8 + 4 * rd, 56)) : 0,
+      lines: rd >= 3 && rnd() < .3 ? 1 + Math.floor(rnd() * Math.min(rd / 3, 4)) : 0, ghosts: rd >= 4 && rnd() < .35 ? 2 + Math.floor(rnd() * 2) : 0 };
+    const inverted = rd >= 3 && style !== 'split' && rnd() < Math.min(.06 * rd, .4);
+    const dmg = () => (weird ? (style === 'seg7' || style === 'dots' ? .3 : .9) : 0) + Math.abs(q.rot) / (30 * Math.PI / 180) + Math.abs(q.shear) * 1.6 +
+      Math.abs(q.sx - 1) + Math.abs(q.sy - 1) + q.blur * .9 + q.lowc * 2.2 + q.dots / 70 + q.lines * .3 + q.ghosts * .25 + (style === 'holes' ? .4 : 0);
+    const steps = [() => { q.ghosts = 0; }, () => { q.lines = 0; }, () => { q.dots = Math.floor(q.dots / 2); }, () => { q.blur *= .5; }, () => { q.lowc *= .5; },
+      () => { q.shear *= .5; }, () => { q.rot *= .7; }, () => { q.sx = 1 + (q.sx - 1) * .5; q.sy = 1 + (q.sy - 1) * .5; }];
+    for (let i = 0; i < steps.length && dmg() > cap; i++) steps[i]();
+    const out = mk(S), c = out.getContext('2d'), ink = inverted ? '#10231d' : '#eafff4';
+    for (let i = 0; i < q.ghosts; i++) {  // chiffres fantômes en arrière-plan
+      c.save(); c.globalAlpha = .14; c.fillStyle = '#bfffe0'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = 'bold ' + Math.round(S * (.5 + rnd() * .4)) + 'px ' + pickOf(FONTS);
+      c.fillText(String(1 + Math.floor(rnd() * 9)), rnd() * S, rnd() * S); c.restore();
+    }
+    if (inverted) { c.fillStyle = '#e6f2ec'; c.beginPath(); c.roundRect(S * .06, S * .06, S * .88, S * .88, S * .16); c.fill(); }
+    const base = baseGlyph(style, digit, font, ink, S, weight, italic);
+    c.save(); c.translate(S / 2, S / 2); c.rotate(q.rot); c.transform(1, 0, q.shear, 1, 0, 0); c.scale(q.sx * .92, q.sy * .92); c.globalAlpha = 1 - q.lowc;
+    c.drawImage(base, -S / 2, -S / 2); c.restore();
+    c.save(); c.strokeStyle = inverted ? 'rgba(20,35,30,.85)' : 'rgba(234,255,244,.8)'; c.lineWidth = S * .026;
+    for (let i = 0; i < q.lines; i++) { c.beginPath(); c.moveTo(rnd() * S, rnd() * S); c.lineTo(rnd() * S, rnd() * S); c.stroke(); }
+    c.restore();
+    if (style === 'holes') { c.globalCompositeOperation = 'destination-out'; for (let i = 0; i < 16; i++) { c.beginPath(); c.arc(rnd() * S, rnd() * S, S * (.03 + rnd() * .04), 0, TAU); c.fill(); } c.globalCompositeOperation = 'source-over'; }
+    c.fillStyle = inverted ? 'rgba(20,35,30,.85)' : 'rgba(234,255,244,.85)';
+    for (let i = 0; i < q.dots; i++) c.fillRect(rnd() * S, rnd() * S, S * .02 + rnd() * S * .02, S * .02 + rnd() * S * .02);
+    if (q.blur > .05) { const t = mk(S); t.getContext('2d').drawImage(out, 0, 0); c.clearRect(0, 0, S, S); c.filter = 'blur(' + (q.blur * 1.6).toFixed(1) + 'px)'; c.drawImage(t, 0, 0); c.filter = 'none'; }
+    return out;
+  }
+
   // ---------- manches ----------
   function newRound() {
     const r = G.round;
@@ -133,16 +221,13 @@ SCRIPT = r"""
     let target; do { target = 1 + Math.floor(Math.random() * 9); } while (target === G.target);
     const n = rows * cols, k = Math.min(3 + Math.floor(r / 3), 7, Math.floor(n / 4));
     const order = Array.from({ length: n }, (_, i) => i).sort(() => Math.random() - .5), isTarget = new Set(order.slice(0, k));
-    const similarP = Math.min(.25 + .06 * r, .75), rotMax = Math.min(4 + 3 * r, 38) * Math.PI / 180;
+    const similarP = Math.min(.25 + .06 * r, .75);
     G.tiles = [];
     for (let i = 0; i < n; i++) {
       let d = target;
       if (!isTarget.has(i)) { do { d = Math.random() < similarP ? pickOf(SIMILAR[target]) : 1 + Math.floor(Math.random() * 9); } while (d === target); }
       const rr = Math.floor(i / cols), cc = i % cols;
-      G.tiles.push({ r: rr, c: cc, digit: d, rot: (Math.random() - .5) * 2 * rotMax, font: pickOf(FONTS), weight: Math.random() < .5 ? 'bold' : 'normal',
-        italic: Math.random() < .2, sc: .82 + Math.random() * .26, blur: r >= 5 && Math.random() < Math.min(.07 * (r - 4), .5) ? .8 + Math.random() * 1.2 : 0,
-        dots: r >= 7 && Math.random() < .4 ? Array.from({ length: 9 }, () => [Math.random(), Math.random()]) : null,
-        delay: (rr + cc) * .03, found: false, wrong: 0, wobble: 0 });
+      G.tiles.push({ r: rr, c: cc, digit: d, glyph: makeGlyph(d, r), delay: (rr + cc) * .03, found: false, wrong: 0, wobble: 0 });
     }
     Object.assign(G, { target, need: k, total: k, rows, cols, s, ox: (W - bw) / 2, oy: TOP + (H - TOP - 10 - bh) / 2, introT: .35 + (rows + cols) * .03,
       clearT: 0, roundT: 0, mistakes: 0 });
@@ -248,13 +333,7 @@ SCRIPT = r"""
     c.shadowColor = hover && !t.found ? 'hsla(' + hue() + ',90%,65%,.7)' : 'rgba(0,0,0,.35)'; c.shadowBlur = hover && !t.found ? 14 : 5; c.shadowOffsetY = 2;
     c.fillStyle = g; c.beginPath(); c.roundRect(-w / 2, -w / 2, w, w, Math.max(5, w * .16)); c.fill(); c.shadowColor = 'transparent';
     c.strokeStyle = t.found ? 'rgba(124,255,178,.7)' : 'hsla(' + hue() + ',60%,60%,' + (hover ? .8 : .22) + ')'; c.lineWidth = 1.4; c.stroke();
-    c.save(); c.rotate(t.rot);
-    if (t.blur) c.filter = 'blur(' + t.blur.toFixed(1) + 'px)';
-    c.font = (t.italic ? 'italic ' : '') + t.weight + ' ' + Math.round(w * .66 * t.sc) + 'px ' + t.font;
-    c.textAlign = 'center'; c.textBaseline = 'middle';
-    c.fillStyle = t.found ? 'rgba(190,255,215,.32)' : '#eafff4'; c.fillText(String(t.digit), 0, 1);
-    c.restore();
-    if (t.dots) { c.fillStyle = 'rgba(255,255,255,.4)'; t.dots.forEach(([x, y]) => c.fillRect((x - .5) * w, (y - .5) * w, 1.6, 1.6)); }
+    c.globalAlpha = t.found ? .3 : 1; c.drawImage(t.glyph, -w * .5, -w * .5, w, w); c.globalAlpha = 1;
     if (t.found) {
       c.strokeStyle = 'rgba(150,255,190,.95)'; c.lineWidth = Math.max(2, w * .06); c.lineCap = 'round'; c.lineJoin = 'round';
       c.beginPath(); c.moveTo(-w * .2, w * .02); c.lineTo(-w * .05, w * .17); c.lineTo(w * .22, -w * .14); c.stroke();
@@ -314,7 +393,7 @@ SCRIPT = r"""
       c.save(); c.font = 'bold 58px ' + MONO; c.textAlign = 'center'; c.shadowColor = 'rgba(60,255,150,.9)'; c.shadowBlur = 24; c.fillStyle = g; c.fillText('DIGIT DASH', W / 2, 165); c.restore();
       c.fillStyle = '#b6e8cc'; c.font = '15px ' + MONO; c.textAlign = 'center';
       ['be the classifier: click every digit shown at the top', 'each hit adds time · each miss costs ' + MISS_COST + 's',
-        'rotated, blurred, noisy fonts... and look-alikes (6 / 9!)'].forEach((t, i) => c.fillText(t, W / 2, 205 + i * 24));
+        'seven-segment, dot-matrix, glitched, melted... and look-alikes (6 / 9!)'].forEach((t, i) => c.fillText(t, W / 2, 205 + i * 24));
       c.fillStyle = 'rgba(255,215,90,' + pulse + ')'; c.font = 'bold 18px ' + MONO; c.fillText('click or press Enter', W / 2, 308);
       const top = tops(); if (top.length) { c.fillStyle = '#6fbf91'; c.font = '13px ' + MONO; c.fillText('best ' + top[0], W / 2, 332); }
     } else if (G.state === 'over') {
@@ -372,7 +451,7 @@ SCRIPT = r"""
     const v = c.createRadialGradient(W / 2, H / 2, H * .4, W / 2, H / 2, W * .66); v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.3)');
     c.fillStyle = v; c.fillRect(0, 0, W, H);
     root.dataset.state = G.state; root.dataset.score = G.score; root.dataset.round = G.round; root.dataset.combo = G.combo; root.dataset.time = G.time.toFixed(1);
-    root._g = G; root._dbg = { update, click, start };  // accès pour tester la difficulté sans attendre le temps réel
+    root._g = G; root._dbg = { update, click, start, newRound };  // accès pour tester la difficulté sans attendre le temps réel
   }
 })();
 """
