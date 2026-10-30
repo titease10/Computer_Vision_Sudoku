@@ -1,42 +1,39 @@
-# Étape 1 — Le solveur
+# 1. Le solveur
 
-Fichier : `src/sudoku_cv/solver.py` — tests : `tests/test_solver.py`
+Code : `src/sudoku_cv/solver.py`. Tests : `tests/test_solver.py`.
 
-## Ce qui a été fait
+C'est la partie la plus simple du projet, et on l'a écrite en premier parce qu'elle ne dépend
+de rien. Deux fonctions : `is_valid_grid(grid)` vérifie qu'aucun chiffre n'apparaît deux fois
+dans une ligne, une colonne ou un bloc 3×3 (les cases vides valent 0 et sont ignorées), et
+`solve(grid)` renvoie la grille complète, ou `None` si elle est invalide ou sans solution. La
+grille d'entrée n'est pas modifiée.
 
-Deux fonctions :
+## Backtracking et MRV
 
-- `is_valid_grid(grid)` : vérifie qu'aucun chiffre n'apparaît deux fois dans une même ligne,
-  colonne ou bloc 3×3 (les cases vides valent 0 et sont ignorées).
-- `solve(grid)` : renvoie la grille complète, ou `None` si la grille est invalide ou sans
-  solution. La grille d'entrée n'est pas modifiée.
+On remplit les cases vides une par une. Pour chaque case, on essaie un chiffre encore autorisé
+et on continue ; à la première impasse (une case sans aucun chiffre possible), on revient en
+arrière et on passe au chiffre suivant.
 
-## Explication
+Pour savoir vite quels chiffres sont autorisés, on garde les chiffres déjà présents dans chaque
+ligne, colonne et bloc, sous forme d'ensembles. Les candidats d'une case sont alors
+`{1..9} − ligne − colonne − bloc`.
 
-### Backtracking (retour sur trace)
-
-On remplit les cases vides une par une. Pour une case, on essaie chaque chiffre encore
-autorisé ; on continue récursivement ; si on arrive à une impasse (une case sans aucun
-chiffre possible), on revient en arrière et on essaie le chiffre suivant.
-
-Pour que « chiffre autorisé » soit rapide, on garde trois listes d'ensembles :
-chiffres déjà présents dans chaque ligne, chaque colonne et chaque bloc. Les candidats d'une
-case sont `{1..9} − ligne − colonne − bloc`.
-
-### Heuristique MRV (« Minimum Remaining Values »)
-
-Au lieu de remplir les cases dans l'ordre, on choisit à chaque fois la case qui a **le moins
-de candidats**. Si une case n'a qu'un candidat, on le pose sans se tromper ; si une case n'en
-a aucun, on détecte l'impasse immédiatement. Cela réduit énormément l'arbre de recherche : la
-grille « AI Escargot », réputée parmi les plus difficiles, est résolue en quelques
+Dans l'ordre naturel des cases, la recherche peut être longue. On choisit donc à chaque fois la
+case qui a le moins de candidats (heuristique MRV, *Minimum Remaining Values*) : une case à un
+seul candidat se remplit sans risque, et une case à zéro candidat révèle l'impasse tout de
+suite. La grille « AI Escargot », réputée parmi les plus difficiles, se résout ainsi en quelques
 millisecondes.
 
-## Pourquoi `is_valid_grid` est importante pour la vision
+## Le solveur contrôle aussi la lecture
 
-Le solveur sert aussi de **contrôle qualité de la lecture**. Si le classifieur lit un 3 à la
-place d'un 8, la grille contient souvent un doublon : `is_valid_grid` le détecte, et on
-pourra alors corriger en reprenant les cases les moins sûres (étape « pipeline »). Sans ce
-contrôle, le backtracking pourrait tourner longtemps sur une grille impossible.
+Si le classifieur lit un 3 à la place d'un 8, la grille contient souvent un doublon, et
+`is_valid_grid` le voit. C'est ce qui permet ensuite de réparer la lecture (voir
+[doc 6](06_pipeline_evaluation.md)). Sans ce contrôle, le backtracking pourrait aussi tourner
+longtemps sur une grille impossible.
+
+Une grille avec plusieurs solutions (des chiffres pris pour des cases vides, par exemple) serait
+quand même « résolue » par `solve`, avec une solution qui n'est pas forcément celle du journal.
+On a donc ajouté `count_solutions`, qui s'arrête à 2 : le pipeline exige une solution unique.
 
 ## Tests
 
@@ -48,10 +45,3 @@ contrôle, le backtracking pourrait tourner longtemps sur une grille impossible.
 | doublon | `is_valid_grid` = False et `solve` = None |
 | grille insoluble mais sans doublon | `solve` = None (une case n'a aucun candidat) |
 | grille vide | une solution valide existe |
-
-## Problèmes / limites
-
-- Une grille avec **plusieurs solutions** (trop peu de chiffres lus, par exemple si des
-  chiffres sont pris pour des cases vides) sera « résolue » quand même : le solveur renvoie la
-  première solution trouvée, qui n'est pas forcément celle du journal. Piste : compter les
-  solutions (arrêt à 2) et signaler une lecture suspecte si la grille n'en a pas exactement une.
