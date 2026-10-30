@@ -193,6 +193,32 @@ STEPS = [
 ]
 
 
+SHORT_TITLES = ["Détection", "Redressement", "Lecture", "Résolution", "Résultat"]
+
+
+def stepper_html(step: int, n_steps: int) -> str:
+    pills = []
+    for i in range(n_steps):
+        state = "on" if i == step else "done" if i < step else ""
+        mark = "✓" if i < step else i + 1
+        pills.append(f'<div class="s {state}"><span class="n">{mark}</span><span class="t">{SHORT_TITLES[i]}</span></div>')
+    return f'<div class="stepper">{"".join(pills)}</div>'
+
+
+def tiles_html(items: list[tuple[str, str]], good_first: bool = False) -> str:
+    """Rangée de chiffres clés : (valeur, légende)."""
+    tiles = [f'<div class="tile{" good" if good_first and i == 0 else ""}"><b>{v}</b><span>{k}</span></div>'
+             for i, (v, k) in enumerate(items)]
+    return f'<div class="tiles">{"".join(tiles)}</div>'
+
+
+def timing_tiles(res, n_found: int) -> str:
+    t = res.timings
+    return tiles_html([(str(n_found), "chiffres ajoutés"), (f"{t['total'] * 1000:.0f} ms", "temps total"),
+                       (f"{res.bbox_conf:.0%}" if res.bbox is not None else "OpenCV", "confiance du cadre"),
+                       (f"{float(res.confidence.mean()):.0%}", "confiance de lecture")], good_first=True)
+
+
 def go(delta: int) -> None:
     st.session_state.step += delta
 
@@ -279,7 +305,7 @@ def step_result(image, res) -> None:
     solved_photo = render_solution(image, res)
     left, right = st.columns([3, 2], gap="large")
     left.image(to_rgb(solved_photo), width="stretch")
-    right.subheader(f"{sum(row.count(0) for row in res.grid)} chiffres ajoutés")
+    right.html(timing_tiles(res, sum(row.count(0) for row in res.grid)))
     right.html(board_html(res.grid, res.solution, set(), set()) + legend_html(True, False, False))
     ok, jpeg = cv2.imencode(".jpg", solved_photo)
     if ok:
@@ -298,8 +324,9 @@ def show_steps(image: np.ndarray, res, doubtful: set, fixed: set) -> None:
             time.sleep(seconds / speed)
 
     title, text = STEPS[step]
-    st.progress((step + 1) / n_steps, text=f"Étape {step + 1}/{n_steps} · {title}")
-    st.write(text)
+    st.html(stepper_html(step, n_steps))
+    st.subheader(title)
+    st.html(f'<p class="step-text">{text}</p>')
     if step == 0:
         step_detection(image, res, anim, pause)
     elif step == 1:
@@ -340,11 +367,12 @@ def main() -> None:
         st.error(f"Impossible de charger les modèles ({source}) : {exc}")
         st.stop()
 
-    mode = st.radio("Source de la photo", ["Importer", "Caméra"], horizontal=True, label_visibility="collapsed")
+    mode = st.segmented_control("Source de la photo", ["Importer", "Caméra"], default="Importer",
+                                label_visibility="collapsed") or "Importer"
     upload = st.file_uploader("Photo du sudoku", type=["jpg", "jpeg", "png"], label_visibility="collapsed") \
         if mode == "Importer" else st.camera_input("Photo du sudoku", label_visibility="collapsed")
     if upload is None:
-        st.caption("Pour une bonne lecture : la grille entière dans le cadre, et pas d'ombre sur les chiffres.")
+        st.caption("📷 Pour une bonne lecture : la grille entière dans le cadre, et pas d'ombre sur les chiffres.")
         return
 
     data = upload.getvalue()
@@ -370,7 +398,8 @@ def main() -> None:
     doubtful = {(r, c) for r in range(9) for c in range(9) if res.confidence[r, c] < LOW_CONF}
     fixed = {(r, c) for r, c, _, _ in res.repaired}
 
-    view = st.radio("Affichage", ["Résolution complète", "Pas à pas"], horizontal=True)
+    view = st.segmented_control("Affichage", ["Résolution complète", "Pas à pas"], default="Résolution complète",
+                                label_visibility="collapsed") or "Résolution complète"
     if view == "Pas à pas":
         show_steps(image, res, doubtful, fixed)
         return
@@ -405,7 +434,7 @@ def main() -> None:
             solved_photo = render_solution(image, shown)
             left.image(to_rgb(solved_photo), width="stretch")
             n_found = sum(row.count(0) for row in grid)
-            right.subheader(f"{n_found} chiffres ajoutés")
+            right.html(timing_tiles(res, n_found))
             if count_solutions(grid) > 1:
                 right.warning("Cette grille a plusieurs solutions, celle-ci n'est peut-être pas celle du journal. "
                               "Une case est sans doute mal lue.")
