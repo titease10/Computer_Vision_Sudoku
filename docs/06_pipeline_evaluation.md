@@ -1,118 +1,94 @@
-# 6. Pipeline complet et évaluation de bout en bout
-
-## Ce qui a été fait
+# 6. Pipeline complet et évaluation
 
 `src/sudoku_cv/pipeline.py` enchaîne toutes les briques :
 
 ```
-photo ─► YOLO detect (bbox) ─► coins OpenCV dans la bbox ─► redressement fin (dewarp)
+photo ─► YOLO detect (cadre) ─► coins OpenCV dans le cadre ─► redressement fin (dewarp)
       ─► 81 cases ─► YOLO-cls ×4 orientations ─► meilleure orientation
       ─► réparation par les règles du sudoku ─► solveur ─► chiffres écrits sur la photo
 ```
 
-- `SudokuPipeline(grid_weights, digit_weights).run(image)` renvoie un `PipelineResult` :
-  statut (`solved`, `unsolvable`, `no_grid`), bbox, rotation, lecture brute, lecture réparée,
-  confiance par case, solution, temps de chaque étape.
-- `render_solution(image, result)` écrit les chiffres manquants sur la photo.
-- `scripts/evaluate.py` mesure le tout sur le jeu de test, expérience MLflow `pipeline_eval`.
+`SudokuPipeline(grid_weights, digit_weights).run(image)` renvoie un `PipelineResult` : statut
+(`solved`, `unsolvable`, `no_grid`), cadre, rotation, lecture brute, lecture réparée, confiance par
+case, solution, temps de chaque étape. `render_solution(image, result)` écrit les chiffres sur la
+photo, et `scripts/evaluate.py` mesure le tout sur le jeu de test (expérience MLflow `pipeline_eval`).
 
-## Deux garde-fous ajoutés
+La première mesure de bout en bout donnait 85,4 %. Deux ajouts ont fait la différence.
 
-### 1. Choix de l'orientation
+## Choisir l'orientation
 
-**Problème observé :** certaines photos wichtounet montrent la grille tournée de 90° ou à
-l'envers (journal photographié de côté). Les coins sont ordonnés par leur position dans la
-photo, donc la grille redressée garde cette rotation : le classifieur lit des chiffres couchés
-et se trompe sur environ 30 cases (w_image1041, 1043, 1083).
+Certaines photos wichtounet montrent la grille tournée de 90° ou à l'envers (journal photographié de
+côté). Les coins sont ordonnés selon la photo, donc la grille redressée garde cette rotation : le
+classifieur lit des chiffres couchés et se trompe sur environ 30 cases (w_image1041, 1043, 1083).
 
-**Solution :** on classe les 81 cases dans les 4 orientations (rotations de 0°, 90°, 180° et
-270° de la grille redressée) et on garde celle dont la **confiance moyenne sur les cases
-lues comme chiffres** est la plus haute. Une grille à l'envers donne des 2, 3, 4, 5, 7
-méconnaissables, donc une confiance basse. Les cases vides ne sont pas comptées : elles sont
-sûres dans toutes les orientations et masqueraient la différence.
+On classe donc les 81 cases dans les 4 orientations (0°, 90°, 180°, 270°) et on garde celle dont la
+confiance moyenne sur les cases lues comme chiffres est la plus haute. À l'envers, les 2, 3, 4, 5 et 7
+deviennent méconnaissables et la confiance chute. Les cases vides ne comptent pas : elles sont sûres
+dans toutes les orientations et masqueraient la différence.
 
 Coût : 4 × 81 petites images 64×64, soit environ +45 ms par photo.
 
-### 2. Réparation par les règles du sudoku
+## Réparer avec les règles
 
-**Idée :** une vraie grille de journal a **exactement une solution**. Si la lecture brute est
-invalide (doublon) ou n'a pas une solution unique, au moins une case est mal lue.
+Une vraie grille de journal a exactement une solution. Si la lecture brute a un doublon ou n'a pas de
+solution unique, au moins une case est mal lue. `repair_grid` prend alors les 8 cases les moins sûres
+et essaie d'en remplacer 1 ou 2 par le 2ᵉ ou le 3ᵉ choix du classifieur. Les combinaisons sont testées
+de la plus probable à la moins probable (coût = perte de log-vraisemblance), et la première qui donne
+une solution unique est retenue. Un correcteur orthographique fait à peu près pareil.
 
-**Méthode (`repair_grid`) :**
-1. on prend les 8 cases les moins sûres ;
-2. on essaie de remplacer 1 ou 2 d'entre elles par leur 2ᵉ ou 3ᵉ choix du classifieur ;
-3. les combinaisons sont testées de la plus probable à la moins probable (coût = perte de
-   log-vraisemblance) ; la première qui donne une grille à solution unique est retenue.
+Le risque est de tomber par hasard sur une mauvaise grille à solution unique. On le surveille avec
+`wrong_solution_rate`, car une réponse fausse donnée avec assurance est pire qu'un aveu d'échec.
 
-C'est la même idée qu'un correcteur orthographique : parmi les corrections qui donnent un
-« mot » valide, on choisit la plus vraisemblable.
+Tests : `tests/test_pipeline.py` (grille correcte inchangée, une erreur réparée, deux erreurs réparées,
+abandon si les erreurs sont lues avec assurance).
 
-**Risque :** « réparer » vers une mauvaise grille qui a, par hasard, une solution unique.
-On le surveille avec la métrique `wrong_solution_rate` (solution affichée mais fausse) : une
-réponse fausse donnée avec assurance est pire qu'un « je n'y arrive pas ».
+## Résultats sur 41 photos de test
 
-Tests unitaires : `tests/test_pipeline.py` (grille correcte inchangée, une erreur réparée,
-deux erreurs réparées, abandon si les erreurs sont lues avec assurance).
+30 photos wichtounet et 11 photos rg1990, jamais vues par l'un ou l'autre modèle. On ajoute les
+briques une à une pour voir ce que chacune apporte :
 
-## Résultats (41 photos de test, jamais vues par les deux modèles)
-
-Le jeu de test est celui du détecteur : 30 photos wichtounet + 11 photos rg1990. Le
-classifieur n'a été entraîné que sur des polices et des photos rg1990 d'entraînement, donc
-aucune de ces photos n'a été vue par l'un ou l'autre modèle.
-
-On ajoute les briques une à une (ablation) pour mesurer l'apport de chacune :
-
-| Configuration | Grille trouvée | Cases justes | Grilles lues parfaitement | **Sudokus résolus** | Solutions fausses | Temps |
+| Configuration | Grille trouvée | Cases justes | Grilles lues parfaitement | Sudokus résolus | Solutions fausses | Temps |
 |---|---|---|---|---|---|---|
 | OpenCV seul, lecture brute | 97,6 % | 94,9 % | 85,4 % | 85,4 % | 0 % | 0,19 s |
 | + détecteur YOLO | 100 % | 96,9 % | 85,4 % | 85,4 % | 0 % | 0,12 s |
 | + choix de l'orientation | 100 % | 99,4 % | 92,7 % | 92,7 % | 0 % | 0,17 s |
-| **+ réparation (pipeline complet)** | **100 %** | 99,4 % | 92,7 % | **97,6 %** | **0 %** | 0,16 s |
+| + réparation (pipeline complet) | 100 % | 99,4 % | 92,7 % | 97,6 % | 0 % | 0,16 s |
 
-Par source, pipeline complet : wichtounet 96,7 % (29/30), rg1990 **100 %** (11/11).
-
-**Objectif du projet (≥ 90 % des sudokus résolus) atteint : 40 photos sur 41.**
+Par source, avec le pipeline complet : wichtounet 96,7 % (29/30), rg1990 100 % (11/11). L'objectif de
+90 % est atteint, avec 40 photos sur 41.
 
 ![Exemples de rendus](img/pipeline_rendus.jpg)
 
-*De gauche à droite : rg_1 (cas normal), w_image1041 (grille tournée de 90°), rg_18 (page
-courbée, une case réparée), w_image1083 (page à l'envers). En vert les chiffres trouvés.*
+*De gauche à droite : rg_1 (cas normal), w_image1041 (grille tournée de 90°), rg_18 (page courbée, une
+case réparée), w_image1083 (page à l'envers). En vert, les chiffres trouvés.*
 
-### Ce que chaque brique apporte
+YOLO ne change pas le nombre de sudokus résolus sur ce test. Il trouve quand même la grille sur 100 %
+des photos (contre 97,6 %) et améliore les cases justes (94,9 % → 96,9 %), grâce à de meilleurs coins
+(95,1 % contre 90,2 %, voir [doc 5](05_detection_grille.md)). Il accélère aussi OpenCV, qui cherche
+dans une zone plus petite.
 
-- **YOLO** ne change pas le nombre de sudokus résolus ici, mais il trouve la grille sur
-  100 % des photos (contre 97,6 %) et améliore les cases justes (94,9 % → 96,9 %), parce que
-  les coins sont meilleurs (95,1 % contre 90,2 %, voir doc 5). Il est aussi plus rapide :
-  OpenCV cherche dans une zone plus petite.
-- **L'orientation** règle les 3 grilles tournées (w_image1041, 1043, 1083).
-- **La réparation** règle 2 photos à une seule case fausse :
-  - `rg_18` : case vide lue « 1 » (le bord de la grille, sur la page courbée, entre dans la
-    case) ;
-  - `w_image46` : un 1 lu « 4 ».
-  Aucune réparation n'a produit de mauvaise solution.
+L'orientation règle les 3 grilles tournées. La réparation règle 2 photos à une seule case fausse :
+`rg_18`, où une case vide est lue « 1 » parce que le bord de la grille entre dans la case, et
+`w_image46`, où un 1 est lu « 4 ». Aucune réparation n'a produit de mauvaise solution sur ce test.
+Ce n'est pas une garantie : le [journal](journal.md) raconte une photo personnelle où c'est arrivé.
 
-### Échec restant
-
-`w_image17` : la grille est **coupée par le bord de la photo**. Le détecteur la trouve, mais
-une partie des cases est hors de l'image : 17 cases fausses, la plupart des chiffres lus
-comme « vide ». La réparation abandonne (trop d'erreurs) et le pipeline répond
-« insoluble » au lieu de donner une solution fausse : c'est le comportement voulu.
+Reste `w_image17`, une grille coupée par le bord de la photo. Le détecteur la trouve, mais une partie
+des cases est hors de l'image : 17 cases fausses, la plupart des chiffres lus comme vides. La
+réparation abandonne et le pipeline répond « insoluble », ce qui est le comportement voulu.
 
 ## Photo à plusieurs grilles
 
-Une double page de magazine contient souvent 2 grilles. Le pipeline récupère toutes les
-détections YOLO, les essaie de la plus sûre à la moins sûre et garde la première résolue
-(voir le journal : test sur une photo personnelle).
+Une double page de magazine contient souvent 2 grilles. Le pipeline récupère toutes les détections
+YOLO, les essaie de la plus sûre à la moins sûre et garde la première résolue (voir le
+[journal](journal.md)).
 
-## Limites et suite
+## Limites
 
-- 41 photos de test et 27 grilles distinctes : chaque photo pèse 2,4 points de pourcentage.
-  Il faudra valider sur des **photos personnelles** prises au téléphone (application
-  Streamlit, étape suivante).
-- Les chiffres de la solution sont écrits droits par rapport à la photo, même quand la
-  grille est tournée : c'est plus lisible, mais pas dans le sens de la grille.
-- Une erreur de lecture qui donne quand même une grille à solution unique ne peut pas être
-  détectée. Aucune sur ce test, mais c'est possible en théorie.
+- 41 photos et 27 grilles distinctes : chaque photo pèse 2,4 points. Les quelques photos personnelles
+  testées ont déjà révélé des cas absents de ce jeu, donc il en faudrait beaucoup plus.
+- Les chiffres de la solution sont écrits droits par rapport à la photo, même quand la grille est
+  tournée. C'est plus lisible, mais ce n'est pas le sens de la grille.
+- Une erreur de lecture qui donne quand même une grille à solution unique ne peut pas être détectée.
 
 ## Commandes
 
@@ -123,22 +99,20 @@ détections YOLO, les essaie de la plus sûre à la moins sûre et garde la prem
 
 ## Model Registry MLflow
 
-Les deux modèles retenus sont enregistrés dans le **Model Registry** de MLflow
-(`scripts/register_models.py`), avec l'alias **`champion`** :
+Les deux modèles retenus sont enregistrés dans le Model Registry (`scripts/register_models.py`), avec
+l'alias `champion` :
 
 | Modèle du registry | Version | Run d'origine | Rôle |
 |---|---|---|---|
-| `sudoku-grid-detector` | v1 | `grid_v1` | bbox de la grille |
+| `sudoku-grid-detector` | v1 | `grid_v1` | cadre de la grille |
 | `sudoku-digit-classifier` | v1 | `cells_v2` | contenu des cases |
 
-**Pourquoi :** l'application et l'évaluation chargent `models:/<nom>@champion`, sans chemin
-de fichier ni id de run en dur (`SudokuPipeline.from_registry(...)`). Pour mettre un
-meilleur modèle en production, on enregistre une nouvelle version et on déplace l'alias :
-le code ne change pas, et on garde l'historique des versions.
+L'application et l'évaluation chargent `models:/<nom>@champion` (`SudokuPipeline.from_registry(...)`),
+sans chemin de fichier ni id de run en dur. Pour changer de modèle, on enregistre une nouvelle version
+et on déplace l'alias, sans toucher au code et en gardant l'historique.
 
-**Détail technique :** les poids Ultralytics (`.pt`) ne sont pas un format de modèle que
-MLflow connaît. On enregistre donc le dossier `weights/` du run comme version, et on
-télécharge `best.pt` au chargement.
+Les poids Ultralytics (`.pt`) ne sont pas un format que MLflow connaît. On enregistre donc le dossier
+`weights/` du run comme version, et on télécharge `best.pt` au chargement.
 
-**Vérification :** `evaluate.py --configs full --from-registry` redonne 97,6 % des sudokus
-résolus, exactement comme avec les chemins locaux.
+`evaluate.py --configs full --from-registry` redonne 97,6 % des sudokus résolus, comme avec les chemins
+locaux.
