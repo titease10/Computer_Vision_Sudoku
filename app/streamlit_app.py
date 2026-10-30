@@ -22,6 +22,7 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "app"))
 
 import charts  # noqa: E402
+import classify_service  # noqa: E402
 import extras  # noqa: E402
 
 from sudoku_cv.pipeline import SudokuPipeline, render_solution  # noqa: E402
@@ -153,6 +154,12 @@ def load_pipeline(source: str, try_rotations: bool, repair: bool) -> SudokuPipel
     if source == "registry":
         return SudokuPipeline.from_registry(TRACKING_URI, try_rotations=try_rotations, repair=repair)
     return SudokuPipeline(*LOCAL_WEIGHTS, try_rotations=try_rotations, repair=repair)
+
+
+@st.cache_resource
+def start_classify_service():
+    """Le service de classification ne se lance qu'une fois, pas à chaque rerun du script."""
+    return classify_service.start()
 
 
 def css_html(theme: str) -> str:
@@ -565,7 +572,7 @@ def main() -> None:
         theme = st.segmented_control("Theme", ["Auto", "Light", "Dark"], default="Auto",
                                      label_visibility="collapsed") or "Auto"
     st.html(css_html(theme))
-    extras.install()
+    extras.install(classify_service.PORT)
     st.html(HERO)
 
     with st.sidebar:
@@ -583,6 +590,8 @@ def main() -> None:
     except Exception as exc:  # registry vide, poids absents...
         st.error(f"Could not load the models ({source}): {exc}")
         st.stop()
+    start_classify_service()
+    classify_service.attach(pipe.classifier)
 
     mode = st.segmented_control("Photo source", ["Upload", "Camera"], default="Upload",
                                 label_visibility="collapsed") or "Upload"
