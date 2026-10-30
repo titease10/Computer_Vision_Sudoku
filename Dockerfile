@@ -18,5 +18,5 @@ COPY app app
 COPY scripts scripts
 COPY tests tests
 
-EXPOSE 8501
+EXPOSE 8501 8512
 CMD ["streamlit", "run", "app/streamlit_app.py", "--server.address=0.0.0.0", "--server.port=8501"]

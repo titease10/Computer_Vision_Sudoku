@@ -8,9 +8,11 @@ services:
     build: .
     ports:
       - "8501:8501"
+      - "8512:8512"  # service de classification interrogé par le navigateur
     environment:
       # Source des modèles dans la barre latérale : "local" (poids de runs/) ou "registry"
       SUDOKU_MODEL_SOURCE: ${SUDOKU_MODEL_SOURCE:-local}
+      SNAP_AI_HOST: 0.0.0.0  # dans le conteneur, le service doit écouter sur toutes les interfaces
     volumes:
       - ./runs:/app/runs:ro
       - ./src:/app/src:ro   # le code modifié est pris en compte sans rebuild
