@@ -1,46 +1,58 @@
-# 7. Application Streamlit
+# 7. L'application Streamlit
 
-## Ce qui a été fait
-
-`app/streamlit_app.py` : on importe une photo (ou on la prend avec la caméra) et l'application
-montre chaque étape du pipeline :
-
-1. **Grille trouvée** : bbox YOLO en bleu, les 20 traits suivis par le redressement en orange
-   (on voit tout de suite si la grille est mal localisée) ;
-2. **Grille redressée** 450×450, avec la rotation appliquée si la grille était tournée ;
-3. **Grille lue**, dans un **tableau modifiable** : les cases réparées et les cases peu sûres
-   (confiance < 0,8) sont listées. Si une case est mal lue, l'utilisateur la corrige et la
-   solution est recalculée tout de suite, sans relancer les modèles ;
-4. **Solution** écrite sur la photo, ou un message clair si la grille est insoluble (doublon,
-   aucune solution) ou ambiguë (plusieurs solutions).
-
-Réglages dans la barre latérale :
-- modèles du **Model Registry MLflow** (alias `champion`) ou fichiers locaux ;
-- activer ou désactiver les 4 orientations et la réparation, pour montrer en démo l'apport de
-  chaque brique.
-
-## Choix techniques
-
-- `st.cache_resource` : les modèles YOLO sont chargés une seule fois, pas à chaque clic.
-- Le résultat du pipeline est gardé dans `st.session_state`, avec comme clé l'empreinte MD5
-  de la photo et les réglages. Modifier une case du tableau relance seulement le solveur
-  (quelques ms), pas la détection ni la lecture (environ 0,8 s).
-- Correction manuelle plutôt qu'échec : sur une photo difficile (grille coupée, w_image17),
-  l'application indique les cases douteuses et l'utilisateur peut finir la lecture à la main.
-
-## Problèmes rencontrés
-
-- `cv2.polylines` refusait les colonnes du tableau des intersections (`pts[:, k]`) : une
-  colonne numpy n'est pas contiguë en mémoire, et OpenCV exige un tableau contigu.
-  Correction : `np.ascontiguousarray`.
-- `use_container_width` est obsolète dans Streamlit 1.66 : remplacé par `width="stretch"`.
-- Tester une application Streamlit sans navigateur : `streamlit.testing.AppTest` ne sait pas
-  simuler l'import d'un fichier. On a remplacé `st.file_uploader` par une fonction qui
-  renvoie une photo de test, pour vérifier 3 cas : page courbée réparée (rg_18), grille
-  coupée insoluble (w_image17), grille tournée de 90° résolue (w_image1041).
-
-## Lancement
+Code : `app/streamlit_app.py`, thème dans `.streamlit/config.toml`.
 
 ```bash
 .venv/Scripts/streamlit run app/streamlit_app.py      # http://localhost:8501
 ```
+
+![Grille résolue](img/app_resolu.png)
+
+## Le parcours
+
+On importe une photo ou on en prend une avec la caméra. Le résultat s'affiche tout de suite : la photo
+avec les chiffres écrits dessus, et à côté la grille dessinée, avec les chiffres trouvés en vert. Les
+cases peu sûres (confiance < 0,8) sont en jaune, les cases corrigées par les règles du sudoku en
+orange. On peut télécharger la photo résolue.
+
+Le reste est replié, pour ne pas noyer quelqu'un qui veut juste sa solution :
+
+- **Corriger une case mal lue** : un tableau modifiable, où une case vide reste vide. La solution se
+  recalcule sans relancer les modèles. Cette section s'ouvre toute seule si la grille n'a pas pu être
+  résolue.
+- **Voir comment la photo a été lue** : le cadre YOLO en bleu, les 20 traits suivis en orange, la grille
+  redressée et le temps de chaque étape. C'est ce qui sert en démo, et pour comprendre un échec.
+
+Quand la grille est impossible à résoudre, on le dit et on explique pourquoi, sans afficher de solution :
+
+![Grille coupée, non résolue](img/app_echec.png)
+
+La barre latérale, repliée par défaut, permet de choisir les modèles (Model Registry avec l'alias
+`champion`, ou fichiers locaux) et de couper le test des orientations ou la réparation, pour montrer en
+démo ce que chacun apporte.
+
+## Choix techniques
+
+`st.cache_resource` charge les modèles YOLO une seule fois. Le résultat du pipeline est gardé dans
+`st.session_state`, avec comme clé l'empreinte MD5 de la photo et les réglages : modifier une case
+relance seulement le solveur (quelques ms), pas la détection ni la lecture (environ 0,8 s).
+
+On laisse la main à l'utilisateur plutôt que d'échouer sèchement : sur une photo difficile (grille
+coupée, w_image17), les cases douteuses sont signalées et on peut finir la lecture à la main.
+
+La correction est placée sous le résultat, alors qu'elle décide de ce qu'il affiche. Le résultat est
+donc dessiné dans un `st.container()` réservé en haut, rempli une fois le tableau lu.
+
+## Problèmes rencontrés
+
+- `cv2.polylines` refusait les colonnes du tableau des intersections (`pts[:, k]`) : une colonne numpy
+  n'est pas contiguë en mémoire et OpenCV exige un tableau contigu. Corrigé avec `np.ascontiguousarray`.
+- `use_container_width` est obsolète dans Streamlit 1.66, remplacé par `width="stretch"`.
+- Une colonne numérique du tableau affiche « None » dans chaque case vide. On est passé à des colonnes
+  texte, limitées à un chiffre de 1 à 9 par une expression régulière.
+- Dans la grille dessinée, les lignes sans aucun chiffre s'écrasaient, et la grille devenait illisible
+  sur les photos ratées. La hauteur des 9 lignes est maintenant imposée (`grid-template-rows`).
+- `streamlit.testing.AppTest` ne sait pas simuler l'import d'un fichier. On remplace `st.file_uploader`
+  par une fonction qui renvoie une photo de test, pour vérifier quatre cas : aucune photo, page courbée
+  réparée (rg_18), grille coupée insoluble (w_image17), grille tournée de 90° résolue (w_image1041).
+  `AppTest` ne montre pas le rendu, alors on regarde aussi l'application dans un vrai navigateur.

@@ -1,9 +1,9 @@
-# Documentation — Solveur de Sudoku par Computer Vision
+# Documentation
 
-Projet scolaire : à partir d'une **photo d'une grille de sudoku sur papier**, lire la grille
-uniquement par vision par ordinateur, la résoudre et afficher la solution sur la photo.
+La présentation générale du projet est dans le [README à la racine](../README.md). Ici, on
+garde le détail de chaque étape : ce qu'on a essayé, les mesures, et ce qui n'a pas marché.
 
-## Sommaire
+Pour une première lecture, le plus parlant est le [journal](journal.md), écrit au fil du projet.
 
 | # | Document | Contenu |
 |---|---|---|
@@ -18,38 +18,30 @@ uniquement par vision par ordinateur, la résoudre et afficher la solution sur l
 | 7 | [07_application.md](07_application.md) | Application Streamlit (photo ou caméra, grille modifiable) |
 | 8 | [08_explication_complete.md](08_explication_complete.md) | Explication de chaque étape : fonctionnement, notions, fonctions appelées, limites, glossaire |
 
-## Vue d'ensemble du pipeline
+## Le pipeline
 
 ```
 Photo
-  │
-  ├─[1] Détection de la grille (YOLO detect)             → bbox de la grille         (grid_v1 : mAP50 0,995)
-  ├─[2] 4 coins (OpenCV, contours)                         → quadrilatère               (fait)
-  ├─[3] Redressement fin (suivi des 20 traits de grille)   → grille plate 450×450       (fait)
-  ├─[4] Découpage 9×9                                      → 81 cases 64×64             (fait)
-  ├─[5] Classification des cases (YOLO-cls, 10 classes)    → grille lue (0 = vide)      (v2 : 99,8 %)
-  ├─[5b] Orientation (4 rotations) + réparation (règles) → grille lue corrigée        (fait)
-  ├─[6] Résolution (backtracking + MRV)                    → grille complète            (fait)
-  └─[7] Rendu : chiffres manquants écrits sur la photo                                  (fait)
+  ├─ détection de la grille (YOLO detect)        cadre de la grille        grid_v1 : mAP50 0,995
+  ├─ 4 coins (OpenCV, contours)                  quadrilatère
+  ├─ redressement fin (suivi des 20 traits)      grille plate 450×450
+  ├─ découpage 9×9                               81 cases 64×64
+  ├─ classification (YOLO-cls, 10 classes)       grille lue (0 = vide)     cells_v2 : 99,8 %
+  ├─ orientation (4 rotations) + réparation      grille lue corrigée
+  ├─ résolution (backtracking + MRV)             grille complète
+  └─ rendu                                       chiffres écrits sur la photo
 
-Bout en bout sur 41 photos de test : 97,6 % des sudokus résolus, 0 solution fausse.
+41 photos de test : 97,6 % des sudokus résolus, 0 solution fausse.
 ```
 
-**Pourquoi ce découpage en étapes ?** Chaque étape a une entrée et une sortie simples, se teste
-séparément et se mesure séparément. Quand le résultat final est faux, on sait localiser
-l'étape fautive (grille mal trouvée ? chiffre mal lu ?), ce qu'un modèle « bout-en-bout »
-unique ne permettrait pas.
-
-**Où intervient l'apprentissage ?** Seulement là où les règles écrites à la main échouent :
-trouver la grille dans une scène quelconque (YOLO detect) et reconnaître un chiffre
-(YOLO-cls). Le reste (géométrie, résolution) est déterministe : il n'a pas besoin de données
-et il est exact.
+Avec ce découpage, quand le résultat final est faux, on peut dire quelle étape a lâché (grille
+mal trouvée, chiffre mal lu). Un modèle unique de bout en bout ne le permettrait pas.
 
 ## Organisation du code
 
 ```
 src/sudoku_cv/
-  solver.py            résolution + validation d'une grille
+  solver.py            résolution et validation d'une grille
   warp.py              coins, redressement 4 points, redressement fin (dewarp)
   cells.py             découpage en cases, prétraitement, heuristique « case remplie »
   digit_classifier.py  enveloppe du modèle YOLO-cls
@@ -64,11 +56,11 @@ scripts/
   evaluate.py              évaluation de bout en bout + MLflow (pipeline_eval)
   register_models.py       enregistrement des modèles dans le Model Registry (alias champion)
 labels/rg1990_grids.json   vérité terrain des photos de test
-app/streamlit_app.py       application de démonstration
+app/streamlit_app.py       application
 tests/                     tests unitaires (pytest)
 ```
 
-## Commandes utiles
+## Commandes
 
 ```bash
 .venv/Scripts/python -m pytest                                   # tests
