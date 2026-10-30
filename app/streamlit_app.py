@@ -8,6 +8,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import sys
+import time
 from pathlib import Path
 
 import cv2
@@ -19,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from sudoku_cv.pipeline import SudokuPipeline, render_solution  # noqa: E402
-from sudoku_cv.solver import count_solutions, is_valid_grid, solve  # noqa: E402
+from sudoku_cv.solver import count_solutions, is_valid_grid, solve, solve_trace  # noqa: E402
 
 TRACKING_URI = f"sqlite:///{(ROOT / 'mlflow.db').as_posix()}"
 LOCAL_WEIGHTS = (ROOT / "runs/grid/grid_v1/weights/best.pt", ROOT / "runs/cells/cells_v2/weights/best.pt")
@@ -121,6 +122,141 @@ def describe_repairs(repaired: list) -> str:
     return "La lecture brute était impossible, une correction a été faite (" + " ; ".join(changes) + ")."
 
 
+STEPS = [
+    ("Détection de la grille", "YOLO encadre la grille (bleu), puis OpenCV suit les 20 traits qui la composent (orange)."),
+    ("Redressement", "La perspective est corrigée : la grille devient un carré vu de face."),
+    ("Lecture des chiffres", "Chaque case est découpée puis lue par le classifieur."),
+    ("Résolution", "Le solveur essaie un chiffre (bleu), et revient en arrière (rouge) quand il tombe sur une impasse."),
+    ("Résultat", "Les chiffres trouvés sont écrits sur la photo d'origine."),
+]
+
+
+def go(delta: int) -> None:
+    st.session_state.step += delta
+
+
+def replay() -> None:
+    st.session_state.played.discard(st.session_state.step)
+
+
+def step_detection(image, res, anim, pause) -> None:
+    slot = st.empty()
+    if anim:
+        slot.image(to_rgb(image), width="stretch")
+        pause(0.5)
+        slot.image(to_rgb(draw_detection(image, res, n_lines=0)), width="stretch")
+        pause(0.5)
+    for n in (range(1, 21) if anim else [20]):
+        slot.image(to_rgb(draw_detection(image, res, n_lines=n)), width="stretch")
+        pause(0.08)
+
+
+def step_warp(image, res, anim, pause) -> None:
+    left, right = st.columns(2)
+    left.image(to_rgb(draw_detection(image, res)), width="stretch", caption="Photo d'origine")
+    slot = right.empty()
+    h = res.flat.shape[0]
+    for n in (range(1, 11) if anim else [10]):
+        shown = np.full_like(res.flat, 255)
+        shown[: h * n // 10] = res.flat[: h * n // 10]
+        slot.image(to_rgb(shown), width="stretch")
+        pause(0.12)
+    right.caption("Grille redressée" + (f" (tournée de {90 * res.rotation}°)." if res.rotation else "."))
+
+
+def step_reading(res, doubtful, fixed, anim, pause) -> None:
+    left, right = st.columns([3, 2], gap="large")
+    flat_slot, board_slot = left.empty(), right.empty()
+    cell = res.flat.shape[0] / 9
+    if anim:
+        read = [[0] * 9 for _ in range(9)]
+        for r in range(9):
+            for c in range(9):
+                read[r][c] = res.raw_grid[r][c]
+                out = res.flat.copy()
+                p1 = (int(c * cell), int(r * cell))
+                p2 = (int((c + 1) * cell), int((r + 1) * cell))
+                cv2.rectangle(out, p1, p2, (255, 120, 0), max(2, res.flat.shape[0] // 150))
+                flat_slot.image(to_rgb(out), width="stretch")
+                board_slot.html(board_html(read, None, set(), set(), {(r, c): "try"}))
+                pause(0.03)
+    flat_slot.image(to_rgb(res.flat), width="stretch")
+    grid = res.grid if res.grid is not None else res.raw_grid
+    board_slot.html(board_html(grid, None, doubtful, fixed) + legend_html(False, bool(doubtful), bool(fixed)))
+    if res.repaired:
+        right.caption(describe_repairs(res.repaired))
+    if res.status != "solved":
+        right.error("Cette lecture ne donne pas une grille résoluble. Passez en « Résolution complète » "
+                    "pour corriger la case mal lue à la main.")
+
+
+def step_solving(res, anim, pause) -> None:
+    left, right = st.columns([3, 2], gap="large")
+    events = solve_trace(res.grid)
+    tries = sum(e[0] == "try" for e in events)
+    undos = len(events) - tries
+    board_slot, stats = left.empty(), right.empty()
+    if anim:
+        cur = [row[:] for row in res.grid]
+        stride = max(1, len(events) // 200)  # au plus ~200 images, quelle que soit la difficulté
+        n_try = n_undo = 0
+        for i, (kind, r, c, v) in enumerate(events):
+            cur[r][c] = v if kind == "try" else 0
+            n_try += kind == "try"
+            n_undo += kind == "undo"
+            if i % stride == 0:
+                board_slot.html(board_html(res.grid, cur, set(), set(), {(r, c): kind}))
+                stats.markdown(f"**{n_try}** essais · **{n_undo}** retours en arrière")
+                pause(0.06)
+    board_slot.html(board_html(res.grid, res.solution, set(), set()))
+    stats.markdown(f"**{tries}** essais · **{undos}** retours en arrière")
+    right.caption("Chaque retour en arrière est une hypothèse abandonnée : plus la grille est difficile, plus il y en a.")
+
+
+def step_result(image, res) -> None:
+    solved_photo = render_solution(image, res)
+    left, right = st.columns([3, 2], gap="large")
+    left.image(to_rgb(solved_photo), width="stretch")
+    right.subheader(f"{sum(row.count(0) for row in res.grid)} chiffres ajoutés")
+    right.html(board_html(res.grid, res.solution, set(), set()) + legend_html(True, False, False))
+    ok, jpeg = cv2.imencode(".jpg", solved_photo)
+    if ok:
+        right.download_button("Télécharger la photo", jpeg.tobytes(), "sudoku_resolu.jpg", "image/jpeg")
+
+
+def show_steps(image: np.ndarray, res, doubtful: set, fixed: set) -> None:
+    """Les étapes du pipeline une par une ; l'animation d'une étape ne se joue qu'à sa première visite."""
+    speed = st.sidebar.select_slider("Vitesse de l'animation", [0.5, 1, 2, 4], value=1, format_func=lambda s: f"×{s}")
+    step = st.session_state.step
+    n_steps = len(STEPS) if res.status == "solved" else 3
+    anim = step not in st.session_state.played
+
+    def pause(seconds: float) -> None:
+        if anim:
+            time.sleep(seconds / speed)
+
+    title, text = STEPS[step]
+    st.progress((step + 1) / n_steps, text=f"Étape {step + 1}/{n_steps} · {title}")
+    st.write(text)
+    if step == 0:
+        step_detection(image, res, anim, pause)
+    elif step == 1:
+        step_warp(image, res, anim, pause)
+    elif step == 2:
+        step_reading(res, doubtful, fixed, anim, pause)
+    elif step == 3:
+        step_solving(res, anim, pause)
+    else:
+        step_result(image, res)
+    st.session_state.played.add(step)
+
+    prev, again, nxt, _ = st.columns([1, 1, 1.4, 3])
+    prev.button("← Précédent", on_click=go, args=(-1,), disabled=step == 0, width="stretch")
+    again.button("↻ Rejouer", on_click=replay, width="stretch")
+    nxt.button("Étape suivante →", on_click=go, args=(1,), type="primary",
+               disabled=step >= n_steps - 1, width="stretch")
+
+
 def main() -> None:
     st.set_page_config(page_title="Sudoku papier", initial_sidebar_state="collapsed", layout="wide")
     st.html(CSS)
@@ -159,6 +295,8 @@ def main() -> None:
         with st.spinner("Lecture de la grille…"):
             st.session_state.result = pipe.run(image)
         st.session_state.key = key
+        st.session_state.step = 0  # nouvelle photo : retour à la première étape
+        st.session_state.played = set()
     res = st.session_state.result
 
     if res.status == "no_grid":
@@ -166,12 +304,17 @@ def main() -> None:
         st.image(to_rgb(image), width="stretch")
         return
 
-    # La correction se fait plus bas mais décide de ce qui s'affiche ici
-    result_area = st.container()
-
     base = res.grid if res.grid is not None else res.raw_grid
     doubtful = {(r, c) for r in range(9) for c in range(9) if res.confidence[r, c] < LOW_CONF}
     fixed = {(r, c) for r, c, _, _ in res.repaired}
+
+    view = st.radio("Affichage", ["Résolution complète", "Pas à pas"], horizontal=True)
+    if view == "Pas à pas":
+        show_steps(image, res, doubtful, fixed)
+        return
+
+    # La correction se fait plus bas mais décide de ce qui s'affiche ici
+    result_area = st.container()
 
     with st.expander("Corriger une case mal lue", expanded=res.status != "solved"):
         st.caption("Laissez vide une case sans chiffre. La solution se recalcule dès que vous changez une case.")
