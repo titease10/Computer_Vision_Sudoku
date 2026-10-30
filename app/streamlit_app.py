@@ -325,6 +325,13 @@ def legend_html(solved: bool, has_doubt: bool, has_fixed: bool) -> str:
     return f'<p class="legend">{" · ".join(parts)}</p>' if parts else ""
 
 
+def show_repair_banner(repaired, target=st) -> None:
+    """Affiche le bandeau s'il y a eu des corrections (st.html refuse une chaîne vide)."""
+    html = charts.repair_banner_html(repaired)
+    if html:
+        target.html(html)
+
+
 STEPS = [
     ("Grid detection", "YOLO boxes the grid (blue), then OpenCV tracks the 20 lines that make it up (orange)."),
     ("Dewarping", "The perspective is corrected: the grid becomes a square seen head-on."),
@@ -496,7 +503,7 @@ def step_reading(res, doubtful, fixed, anim, pause) -> None:
     flat_slot.image(to_rgb(res.flat), width="stretch")
     grid = res.grid if res.grid is not None else res.raw_grid
     board_slot.html(board_html(grid, None, doubtful, fixed) + legend_html(False, bool(doubtful), bool(fixed)))
-    banner.html(charts.repair_banner_html(res.repaired))
+    show_repair_banner(res.repaired, banner)
     if res.status != "solved":
         right.error("This reading does not give a solvable grid. Switch to “Full solution” "
                     "to fix the misread cell by hand.")
@@ -528,7 +535,7 @@ def step_solving(res, anim, pause) -> dict:
 
 def step_result(image, res, anim) -> None:
     solved_photo = render_solution(image, res)
-    st.html(charts.repair_banner_html(res.repaired))
+    show_repair_banner(res.repaired)
     left, right = st.columns([3, 2], gap="large")
     left.image(to_rgb(solved_photo), width="stretch")
     right.html(timing_tiles(res, sum(row.count(0) for row in res.grid)))
@@ -656,7 +663,7 @@ def main() -> None:
 
     with result_area:
         if grid == res.grid:  # le bandeau disparaît si l'utilisateur corrige lui-même une case
-            st.html(charts.repair_banner_html(res.repaired))
+            show_repair_banner(res.repaired)
         left, right = st.columns([3, 2], gap="large")
         if shown.solution is None:
             msg = "a digit appears twice in a row, column or block" if not is_valid_grid(grid) \
