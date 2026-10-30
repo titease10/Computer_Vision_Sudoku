@@ -56,3 +56,25 @@ def test_repair_banner_lists_changes_and_is_empty_without_repairs():
     assert 'role="alert"' in out and "2 cells were changed" in out
     assert "row 3, column 1: <b>5</b> → <b>6</b>" in out and "<b>empty</b> → <b>3</b>" in out
     assert "1 cell was changed" in repair_banner_html([(0, 0, 1, 2)])
+
+
+def test_board_has_nine_blocks_of_nine_cells_and_custom_tooltips():
+    from charts import board_html
+
+    grid = [[0] * 9 for _ in range(9)]
+    grid[0][0] = 5
+    solution = [[(r * 3 + r // 3 + c) % 9 + 1 for c in range(9)] for r in range(9)]
+    out = board_html(grid, solution, {(0, 1)}, {(0, 2)}, pop=True)
+    assert out.count('class="blk"') == 9 and out.count('class="cell') == 81
+    assert out.count("found") >= 80 and 'class="board pop"' in out and "--end:" in out
+    assert "Row 1, column 1: 5 on the paper" in out and "uncertain reading" in out and "corrected using the sudoku rules" in out
+    assert " title=" not in out  # infobulles maison (data-tip), pas celles du navigateur
+
+
+def test_no_native_title_tooltips_in_charts():
+    import numpy as np
+
+    from charts import heatmap_html, stack_html
+
+    assert " title=" not in heatmap_html(np.ones((9, 9)), [[0] * 9 for _ in range(9)])
+    assert " title=" not in stack_html([("a", 0.1), ("b", 0.2)])

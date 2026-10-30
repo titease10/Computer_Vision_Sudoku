@@ -72,7 +72,9 @@ CHARTS_CSS = r"""
 .legend-list span { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
 
 /* barre des temps */
-.stack { display: flex; height: 1.6rem; border-radius: 999px; overflow: hidden; background: var(--line); gap: 2px; }
+.stack { display: flex; height: 1.6rem; border-radius: 999px; background: var(--line); gap: 2px; }
+.stack i:first-child { border-radius: 999px 4px 4px 999px; } .stack i:last-child { border-radius: 4px 999px 999px 4px; }
+.stack i:only-child { border-radius: 999px; }
 .stack i { width: var(--w); min-width: 4px; animation: wid 1s cubic-bezier(.2,.8,.2,1) both; animation-delay: calc(var(--i) * 120ms); }
 .c0 { background: var(--blue); } .c1 { background: var(--green); } .c2 { background: var(--amber); } .c3 { background: var(--rose); }
 .c4 { background: var(--muted); }
@@ -100,11 +102,61 @@ CHARTS_CSS = r"""
 .warn ul { margin: .6rem 0 0; padding-left: 1.2rem; font-size: .92rem; }
 .warn li b { font-variant-numeric: tabular-nums; }
 
+/* infobulles maison : data-tip remplace l'attribut title, dont l'infobulle est celle du navigateur */
+[data-tip] { position: relative; }
+[data-tip]::before, [data-tip]::after { position: absolute; left: 50%; pointer-events: none; opacity: 0; z-index: 30;
+  transition: opacity .14s ease, transform .14s ease; }
+[data-tip]::after { content: attr(data-tip); bottom: calc(100% + 9px); transform: translate(-50%, 5px); white-space: nowrap;
+  background: var(--ink); color: var(--paper); font: 500 .74rem/1.3 sans-serif; letter-spacing: 0; text-transform: none;
+  padding: .4rem .65rem; border-radius: 8px; box-shadow: 0 6px 18px var(--shadow); }
+[data-tip]::before { content: ""; bottom: calc(100% + 3px); transform: translate(-50%, 5px);
+  border: 6px solid transparent; border-top-color: var(--ink); }
+[data-tip]:hover::before, [data-tip]:hover::after { opacity: 1; transform: translate(-50%, 0); }
+
+/* la grille : neuf blocs, chaque case est une petite tuile arrondie */
+.board { position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; padding: 8px;
+  box-sizing: border-box; width: 100%; max-width: 440px; border-radius: 18px; border: 1px solid var(--line);
+  background: linear-gradient(145deg, var(--line), var(--card)); box-shadow: 0 10px 30px var(--shadow);
+  font-family: var(--serif); font-size: clamp(1rem, 4.2vw, 1.5rem); font-variant-numeric: tabular-nums; }
+.board .blk { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; padding: 3px; border-radius: 12px;
+  background: var(--card); }
+.board .cell { position: relative; aspect-ratio: 1; display: grid; place-items: center; border-radius: 8px; color: var(--ink);
+  background: color-mix(in srgb, var(--line) 28%, var(--card)); cursor: default;
+  transition: transform .18s cubic-bezier(.3,1.5,.5,1), box-shadow .18s ease; }
+.board .cell:hover { transform: scale(1.16); z-index: 6; box-shadow: 0 8px 18px var(--shadow); }
+.board .found { color: var(--green); font-weight: 700; background: color-mix(in srgb, var(--green) 11%, var(--card)); }
+.board .doubt { background: var(--amber); }
+.board .fixed { background: var(--rose); }
+.board .try { background: var(--blue); }
+.board .undo { background: var(--red); }
+
+/* révélation de la grille résolue : les chiffres éclosent en vague diagonale, puis un reflet balaie la grille */
+@keyframes reveal { 0% { opacity: 0; transform: scale(.2) rotate(-14deg); box-shadow: 0 0 0 0 rgba(60,190,110,.75); }
+  55% { opacity: 1; transform: scale(1.28) rotate(3deg); box-shadow: 0 0 0 11px rgba(60,190,110,0); }
+  100% { opacity: 1; transform: none; box-shadow: 0 0 0 0 rgba(60,190,110,0); } }
+@keyframes shine { 0% { background-position: 130% 0; opacity: 1; } 85% { opacity: 1; } 100% { background-position: -30% 0; opacity: 0; } }
+@keyframes glow { 40% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--green) 38%, transparent), 0 10px 40px var(--shadow); } }
+.board.pop .found { animation: reveal .75s cubic-bezier(.3,1.3,.5,1) var(--d) backwards; }
+.board.pop { animation: glow 1.5s ease-out var(--end) backwards; }
+.board.pop::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(115deg, transparent 35%, rgba(255,255,255,.3) 50%, transparent 65%); background-size: 300% 100%;
+  animation: shine 1.3s ease-out var(--end) both; }
+
 /* onglets natifs */
 [data-baseweb="tab"] { color: var(--muted); }
 [data-baseweb="tab"][aria-selected="true"] { color: var(--green); }
 [data-baseweb="tab-highlight"] { background-color: var(--green); }
 """
+
+def _peer_css() -> str:
+    """Au survol d'une case, sa ligne, sa colonne et son bloc se teintent (les 27 groupes de la grille)."""
+    groups = [f"{kind}{i}" for kind in "rcb" for i in range(9)]
+    selectors = ",\n".join(f".board:has(.{g}:hover) .{g}:not(:hover)" for g in groups)
+    return selectors + " { box-shadow: inset 0 0 0 100px color-mix(in srgb, var(--green) 15%, transparent); }\n"
+
+
+CHARTS_CSS += _peer_css()
+
 
 def counter(text: str) -> str:
     """« 1564 ms » -> un compteur animé qui monte jusqu'à 1564, suivi de « ms ». Texte sans chiffre : inchangé."""
@@ -140,6 +192,44 @@ def repair_banner_html(repaired: Sequence[tuple[int, int, int, int]]) -> str:
             f"<ul>{items}</ul></div></div>")
 
 
+def board_html(grid: Sequence[Sequence[int]], solution, doubtful: set, fixed: set, marks: Optional[dict] = None,
+               pop: bool = False) -> str:
+    """La grille dessinée : chiffres lus en noir, chiffres trouvés en vert, cases à vérifier surlignées.
+
+    `marks` ({(ligne, col): classe CSS}) surligne des cases pendant les animations ;
+    `pop` fait éclore les chiffres trouvés en vague diagonale, puis passe un reflet sur la grille.
+    """
+    marks = marks or {}
+    found = [(r, c) for r in range(9) for c in range(9) if not grid[r][c] and solution and solution[r][c]]
+    delay = {rc: k for k, rc in enumerate(sorted(found, key=lambda rc: (rc[0] + rc[1], rc[0])))}
+    step = min(45.0, 1600 / max(len(found), 1))  # la révélation entière dure au plus ~1,6 s
+    blocks: list[list[str]] = [[] for _ in range(9)]
+    for r in range(9):
+        for c in range(9):
+            value = grid[r][c] or (solution[r][c] if solution else 0) or ""
+            classes = ["cell", f"r{r}", f"c{c}", f"b{3 * (r // 3) + c // 3}"]
+            tip = f"Row {r + 1}, column {c + 1}: "
+            if (r, c) in delay:
+                classes.append("found")
+                tip += f"{value} found by the solver"
+            else:
+                tip += f"{value} on the paper" if value else "empty"
+            if (r, c) in marks:
+                classes.append(marks[(r, c)])
+            elif (r, c) in fixed:
+                classes.append("fixed")
+                tip += " · corrected using the sudoku rules"
+            elif (r, c) in doubtful:
+                classes.append("doubt")
+                tip += " · uncertain reading"
+            style = f' style="--d:{delay[(r, c)] * step:.0f}ms"' if (r, c) in delay else ""
+            blocks[3 * (r // 3) + c // 3].append(
+                f'<div class="{" ".join(classes)}"{style} data-tip="{html.escape(tip)}">{value}</div>')
+    body = "".join(f'<div class="blk">{"".join(cells)}</div>' for cells in blocks)
+    end = f' style="--end:{len(found) * step + 300:.0f}ms"' if pop else ""
+    return f'<div class="board{" pop" if pop else ""}"{end}>{body}</div>'
+
+
 def _tier(conf: float) -> str:
     return "t3" if conf >= 0.98 else "t2" if conf >= 0.9 else "t1" if conf >= 0.8 else "lo" if conf >= 0.5 else "bad"
 
@@ -151,7 +241,7 @@ def heatmap_html(confidence: np.ndarray, grid: Sequence[Sequence[int]]) -> str:
         for c in range(9):
             conf = float(confidence[r, c])
             cells.append(f'<div class="{_tier(conf)}" style="--i:{r * 9 + c}" '
-                         f'title="row {r + 1}, column {c + 1}: {conf:.1%}">{grid[r][c] or "·"}</div>')
+                         f'data-tip="Row {r + 1}, column {c + 1} · {conf:.1%} sure">{grid[r][c] or "·"}</div>')
     return (f'<div class="heat">{"".join(cells)}</div>'
             '<div class="heat-legend"><span>uncertain</span><i></i><span>very sure</span></div>')
 
@@ -203,7 +293,7 @@ def stack_html(steps: list[tuple[str, float]]) -> str:
     """Barre empilée des durées (secondes) : (nom de l'étape, durée)."""
     steps = [(n, t) for n, t in steps if t and t > 0]
     total = sum(t for _, t in steps) or 1
-    segs = "".join(f'<i class="c{k % 5}" style="--w:{100 * t / total:.2f}%;--i:{k}" title="{n} : {t * 1000:.0f} ms"></i>'
+    segs = "".join(f'<i class="c{k % 5}" style="--w:{100 * t / total:.2f}%;--i:{k}" data-tip="{html.escape(n)}: {t * 1000:.0f} ms ({t / total:.0%})"></i>'
                    for k, (n, t) in enumerate(steps))
     legend = "".join(f'<li><i class="c{k % 5}"></i>{html.escape(n)}<span>{t * 1000:.0f} ms · {t / total:.0%}</span></li>'
                      for k, (n, t) in enumerate(steps))
