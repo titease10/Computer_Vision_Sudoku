@@ -16,6 +16,7 @@ uniquement par vision par ordinateur, la résoudre et afficher la solution sur l
 | 5 | [05_detection_grille.md](05_detection_grille.md) | Détection de la grille avec YOLO detect : datasets, découpage, pièges, résultats |
 | 6 | [06_pipeline_evaluation.md](06_pipeline_evaluation.md) | Pipeline complet, orientation, réparation, évaluation de bout en bout, Model Registry |
 | 7 | [07_application.md](07_application.md) | Application Streamlit (photo ou caméra, grille modifiable) |
+| 8 | [08_explication_complete.md](08_explication_complete.md) | Explication de chaque étape : fonctionnement, notions, fonctions appelées, limites, glossaire |
 
 ## Vue d'ensemble du pipeline
 
