@@ -325,12 +325,6 @@ def legend_html(solved: bool, has_doubt: bool, has_fixed: bool) -> str:
     return f'<p class="legend">{" · ".join(parts)}</p>' if parts else ""
 
 
-def describe_repairs(repaired: list) -> str:
-    changes = [f"row {r + 1}, column {c + 1}: {a or 'empty'} replaced by {b or 'empty'}"
-               for r, c, a, b in repaired]
-    return "The raw reading was impossible, so a correction was made (" + " ; ".join(changes) + ")."
-
-
 STEPS = [
     ("Grid detection", "YOLO boxes the grid (blue), then OpenCV tracks the 20 lines that make it up (orange)."),
     ("Dewarping", "The perspective is corrected: the grid becomes a square seen head-on."),
@@ -483,6 +477,7 @@ def step_warp(image, res, anim, pause) -> None:
 
 
 def step_reading(res, doubtful, fixed, anim, pause) -> None:
+    banner = st.empty()
     left, right = st.columns([3, 2], gap="large")
     flat_slot, board_slot = left.empty(), right.empty()
     cell = res.flat.shape[0] / 9
@@ -501,8 +496,7 @@ def step_reading(res, doubtful, fixed, anim, pause) -> None:
     flat_slot.image(to_rgb(res.flat), width="stretch")
     grid = res.grid if res.grid is not None else res.raw_grid
     board_slot.html(board_html(grid, None, doubtful, fixed) + legend_html(False, bool(doubtful), bool(fixed)))
-    if res.repaired:
-        right.caption(describe_repairs(res.repaired))
+    banner.html(charts.repair_banner_html(res.repaired))
     if res.status != "solved":
         right.error("This reading does not give a solvable grid. Switch to “Full solution” "
                     "to fix the misread cell by hand.")
@@ -534,6 +528,7 @@ def step_solving(res, anim, pause) -> dict:
 
 def step_result(image, res, anim) -> None:
     solved_photo = render_solution(image, res)
+    st.html(charts.repair_banner_html(res.repaired))
     left, right = st.columns([3, 2], gap="large")
     left.image(to_rgb(solved_photo), width="stretch")
     right.html(timing_tiles(res, sum(row.count(0) for row in res.grid)))
@@ -660,6 +655,8 @@ def main() -> None:
         shown.solution = solve(grid) if is_valid_grid(grid) else None
 
     with result_area:
+        if grid == res.grid:  # le bandeau disparaît si l'utilisateur corrige lui-même une case
+            st.html(charts.repair_banner_html(res.repaired))
         left, right = st.columns([3, 2], gap="large")
         if shown.solution is None:
             msg = "a digit appears twice in a row, column or block" if not is_valid_grid(grid) \
@@ -677,8 +674,6 @@ def main() -> None:
                               "A cell is probably misread.")
         right.html(board_html(grid, shown.solution, doubtful, fixed)
                    + legend_html(shown.solution is not None, bool(doubtful), bool(fixed)))
-        if res.repaired and grid == res.grid:
-            right.caption(describe_repairs(res.repaired))
         if shown.solution is not None:
             ok, jpeg = cv2.imencode(".jpg", solved_photo)
             if ok:
