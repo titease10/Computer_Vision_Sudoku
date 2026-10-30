@@ -1,6 +1,6 @@
 import numpy as np
 
-from charts import counter, donut_html, gauge_svg, heatmap_html, histogram_svg, model_card_html, stack_html
+from charts import CHARTS_CSS, counter, donut_html, gauge_html, heatmap_html, histogram_html, model_card_html, stack_html
 
 
 def test_counter_splits_number_and_suffix():
@@ -19,18 +19,19 @@ def test_heatmap_has_81_cells_with_tiers():
 
 def test_histogram_counts_every_cell():
     conf = np.full((9, 9), 0.999)
-    svg = histogram_svg(conf)
-    assert svg.count("<rect") == 10 and ">81<" in svg
+    svg = histogram_html(conf)
+    assert svg.count("class=\"bar ") == 10 and ">81<" in svg
 
 
 def test_gauge_clamps_value():
-    assert "100%" in gauge_svg(3.0, "x") or 'data-suf="%"' in gauge_svg(3.0, "x")
-    assert 'stroke-dashoffset:0.00' in gauge_svg(3.0, "x")
+    assert "--p:100.0" in gauge_html(3.0, "x")
+    assert "--p:0.0" in gauge_html(-1.0, "x")
 
 
 def test_donut_and_stack_shares():
     d = donut_html([("a", 30, "c0"), ("b", 50, "c1")], "81", "cases")
-    assert d.count('class="seg"') == 2
+    assert d.count("calc(var(--k)") == 4  # 2 parts, début et fin de chacune
+    assert "37.50%" in d  # 30 / 80
     s = stack_html([("detect", 0.1), ("warp", 0.3), ("rien", 0.0)])
     assert s.count("<i class=\"c") == 4  # 2 segments + 2 pastilles de légende, l'étape à 0 est ignorée
 
@@ -38,3 +39,10 @@ def test_donut_and_stack_shares():
 def test_model_card_skips_missing_metrics():
     out = model_card_html("M", "YOLO", [("a", 0.5), ("b", None)])
     assert out.count('class="mrow"') == 1
+
+
+def test_css_has_no_angle_bracket():
+    # st.html supprime tout <style> dont le contenu ressemble à une balise (ex. "<integer>")
+    from charts import CHARTS_CSS
+
+    assert "<" not in CHARTS_CSS

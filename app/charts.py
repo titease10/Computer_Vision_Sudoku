@@ -12,17 +12,20 @@ from typing import Optional, Sequence
 
 import numpy as np
 
-CHARTS_CSS = """
+CHARTS_CSS = r"""
 /* compteurs : le chiffre monte de 0 à sa valeur (la valeur finale est la valeur de base, sans animation) */
-@property --n { syntax: "<integer>"; initial-value: 0; inherits: false; }
+@property --n { syntax: "\3C integer\3E"; initial-value: 0; inherits: false; }
 @keyframes count { from { --n: 0; } }
 .cnt { --n: var(--to); animation: count 1.2s cubic-bezier(.2,.7,.2,1) both; counter-reset: cnt var(--n); }
 .cnt::after { content: counter(cnt) attr(data-suf); }
 
 @keyframes grow { from { transform: scaleY(0); } }
 @keyframes wid { from { width: 0; } }
-@keyframes arc { from { stroke-dashoffset: var(--len); } }
-@keyframes seg { from { stroke-dasharray: 0 100; } }
+/* anneaux : --p (jauge, en %) et --k (donut, de 0 à 1) sont animés, d'où leur déclaration typée */
+@property --p { syntax: "\3C number\3E"; initial-value: 0; inherits: false; }
+@property --k { syntax: "\3C number\3E"; initial-value: 1; inherits: false; }
+@keyframes fillp { from { --p: 0; } }
+@keyframes fillk { from { --k: 0; } }
 @keyframes fade { from { opacity: 0; transform: scale(.7); } }
 
 .panel { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 1rem 1.2rem; margin-bottom: .9rem;
@@ -45,21 +48,22 @@ CHARTS_CSS = """
 .heat-legend i { width: 7rem; height: .5rem; border-radius: 999px; background: linear-gradient(90deg, var(--red), var(--amber), var(--green)); }
 
 /* histogramme */
-.hist { width: 100%; max-width: 420px; display: block; }
-.hist rect { transform-box: fill-box; transform-origin: bottom; animation: grow .7s cubic-bezier(.2,.8,.2,1) both; animation-delay: calc(var(--i) * 55ms); }
-.hist .good { fill: var(--green); } .hist .mid { fill: var(--amber); } .hist .low { fill: var(--red); }
-.hist text { fill: var(--muted); font-size: 9px; text-anchor: middle; font-family: sans-serif; }
-.hist text.v { fill: var(--ink); font-weight: 600; }
+.hist { display: flex; align-items: flex-end; gap: 6px; height: 130px; width: 100%; max-width: 420px; }
+.hist > div { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; min-width: 0; }
+.hist .v { font-size: .72rem; font-weight: 600; color: var(--ink); height: 1rem; }
+.hist .bar { width: 100%; height: calc(var(--h) * 1%); min-height: 2px; border-radius: 4px 4px 0 0; transform-origin: bottom;
+  animation: grow .8s cubic-bezier(.2,.8,.2,1) both; animation-delay: calc(var(--i) * 55ms); }
+.hist .good { background: var(--green); } .hist .mid { background: var(--amber); } .hist .low { background: var(--red); }
+.hist .l { font-size: .62rem; color: var(--muted); margin-top: .25rem; height: .9rem; }
 
-/* jauge et donut */
-.gauge, .donut { display: block; margin: 0 auto; max-width: 190px; width: 100%; overflow: visible; }
-.gauge .bg, .donut .bg { fill: none; stroke: var(--line); stroke-width: 9; }
-.gauge .fg { fill: none; stroke: var(--green); stroke-width: 9; stroke-linecap: round; stroke-dasharray: var(--len);
-  animation: arc 1.3s cubic-bezier(.2,.8,.2,1) both; }
-.gauge text, .donut text { text-anchor: middle; fill: var(--ink); font-family: var(--serif); }
-.gauge .big { font-size: 26px; } .gauge .small { font-size: 8px; fill: var(--muted); font-family: sans-serif; letter-spacing: .08em; text-transform: uppercase; }
-.donut .seg { fill: none; stroke-width: 6; animation: seg 1.1s cubic-bezier(.2,.8,.2,1) both; }
-.donut .big { font-size: 9px; } .donut .small { font-size: 2.6px; fill: var(--muted); font-family: sans-serif; }
+/* jauge et donut : un disque en conic-gradient, percé par un disque de la couleur de la carte */
+.ring { position: relative; width: min(100%, 170px); aspect-ratio: 1; border-radius: 50%; margin: 0 auto; display: grid; place-items: center;
+  text-align: center; }
+.ring::before { content: ""; position: absolute; inset: 11%; border-radius: 50%; background: var(--card); }
+.ring > div { position: relative; font-family: var(--serif); font-size: 1.9rem; line-height: 1.05; color: var(--ink); }
+.ring > div small { display: block; font-family: sans-serif; font-size: .62rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-top: .2rem; }
+.gauge { background: conic-gradient(var(--green) calc(var(--p) * 1%), var(--line) 0); animation: fillp 1.4s cubic-bezier(.2,.8,.2,1) both; }
+.donut { animation: fillk 1.3s cubic-bezier(.2,.8,.2,1) both; }
 .legend-list { list-style: none; padding: 0; margin: .6rem 0 0; font-size: .85rem; color: var(--ink); }
 .legend-list li { display: flex; align-items: center; gap: .5rem; margin: .2rem 0; }
 .legend-list i { width: .7rem; height: .7rem; border-radius: 3px; flex: none; }
@@ -87,9 +91,6 @@ CHARTS_CSS = """
 [data-baseweb="tab"][aria-selected="true"] { color: var(--green); }
 [data-baseweb="tab-highlight"] { background-color: var(--green); }
 """
-
-HALF_CIRCLE = math.pi * 50  # longueur de l'arc de la jauge (rayon 50)
-
 
 def counter(text: str) -> str:
     """« 1564 ms » -> un compteur animé qui monte jusqu'à 1564, suivi de « ms ». Texte sans chiffre : inchangé."""
@@ -123,53 +124,45 @@ def heatmap_html(confidence: np.ndarray, grid: Sequence[Sequence[int]]) -> str:
 
 
 HIST_EDGES = [0.0, 0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 0.98, 0.995, 1.0001]
-HIST_LABELS = ["<50", "60", "70", "80", "85", "90", "95", "98", "99,5", "100"]
+HIST_LABELS = ["&lt;50", "60", "70", "80", "85", "90", "95", "98", "99,5", "100"]
 
 
-def histogram_svg(confidence: np.ndarray) -> str:
+def histogram_html(confidence: np.ndarray) -> str:
     """Répartition des 81 confiances. Hauteur en racine carrée : sinon les rares cases douteuses disparaissent."""
     counts, _ = np.histogram(np.asarray(confidence).ravel(), bins=HIST_EDGES)
     top = max(int(counts.max()), 1)
-    bars = []
+    cols = []
     for k, n in enumerate(counts):
-        h = 70 * math.sqrt(n / top)
-        x = 8 + k * 31
         tone = "low" if k < 4 else "mid" if k < 6 else "good"
-        bars.append(f'<rect class="{tone}" style="--i:{k}" x="{x}" y="{82 - h:.1f}" width="24" height="{max(h, 1.5):.1f}" rx="3"/>'
-                    f'<text class="v" x="{x + 12}" y="{78 - h:.1f}">{n if n else ""}</text>'
-                    f'<text x="{x + 12}" y="95">{HIST_LABELS[k]}</text>')
-    return (f'<svg class="hist" viewBox="0 0 330 104" role="img" aria-label="Répartition des confiances">'
-            f'{"".join(bars)}</svg>')
+        h = 100 * math.sqrt(n / top)
+        cols.append(f'<div><span class="v">{n if n else ""}</span>'
+                    f'<i class="bar {tone}" style="--h:{h:.1f};--i:{k}"></i><span class="l">{HIST_LABELS[k]}</span></div>')
+    return f'<div class="hist" role="img" aria-label="Répartition des confiances">{"".join(cols)}</div>'
 
 
-def gauge_svg(value: float, label: str) -> str:
-    """Demi-cercle rempli à `value` (0 à 1), avec la valeur au centre."""
+def gauge_html(value: float, label: str) -> str:
+    """Anneau rempli à `value` (0 à 1), avec la valeur au centre."""
     value = min(max(value, 0.0), 1.0)
-    offset = HALF_CIRCLE * (1 - value)
-    path = "M 10 60 A 50 50 0 0 1 110 60"
-    return (f'<svg class="gauge" viewBox="0 0 120 72" role="img" aria-label="{html.escape(label)} : {value:.0%}">'
-            f'<path class="bg" d="{path}"/>'
-            f'<path class="fg" d="{path}" style="--len:{HALF_CIRCLE:.2f};stroke-dashoffset:{offset:.2f}"/>'
-            f'<text class="big" x="60" y="52">{counter(f"{value * 100:.0f}%")}</text>'
-            f'<text class="small" x="60" y="68">{html.escape(label)}</text></svg>')
+    return (f'<div class="ring gauge" style="--p:{value * 100:.1f}" role="img" aria-label="{html.escape(label)} : {value:.0%}">'
+            f'<div>{counter(f"{value * 100:.0f}%")}<small>{html.escape(label)}</small></div></div>')
+
+
+PALETTE = {"c0": "var(--blue)", "c1": "var(--green)", "c2": "var(--amber)", "c3": "var(--rose)", "c4": "var(--muted)"}
 
 
 def donut_html(parts: list[tuple[str, float, str]], center: str, unit: str) -> str:
     """Anneau en parts : (légende, valeur, classe de couleur c0..c4), avec la légende dessous."""
     total = sum(v for _, v, _ in parts) or 1
-    palette = {"c0": "var(--blue)", "c1": "var(--green)", "c2": "var(--amber)", "c3": "var(--rose)", "c4": "var(--muted)"}
-    arcs, items, start = [], [], 0.0
+    stops, items, start = [], [], 0.0
     for label, v, cls in parts:
-        share = 100 * v / total
-        arcs.append(f'<circle class="seg" cx="21" cy="21" r="15.9155" style="stroke:{palette[cls]};'
-                    f'stroke-dasharray:{share:.2f} {100 - share:.2f};stroke-dashoffset:{-start:.2f}"/>')
+        end = start + 100 * v / total
+        stops.append(f"{PALETTE[cls]} calc(var(--k) * {start:.2f}%) calc(var(--k) * {end:.2f}%)")
         items.append(f'<li><i class="{cls}"></i>{html.escape(label)}<span>{v:g}</span></li>')
-        start += share
-    svg = (f'<svg class="donut" viewBox="0 0 42 42" role="img"><circle class="bg" cx="21" cy="21" r="15.9155" style="stroke-width:6"/>'
-           f'<g transform="rotate(-90 21 21)">{"".join(arcs)}</g>'
-           f'<text class="big" x="21" y="22.5">{html.escape(center)}</text>'
-           f'<text class="small" x="21" y="27">{html.escape(unit)}</text></svg>')
-    return svg + f'<ul class="legend-list">{"".join(items)}</ul>'
+        start = end
+    gradient = f"conic-gradient({', '.join(stops)}, var(--line) 0)"
+    ring = (f'<div class="ring donut" style="background:{gradient}">'
+            f'<div>{counter(center)}<small>{html.escape(unit)}</small></div></div>')
+    return ring + f'<ul class="legend-list">{"".join(items)}</ul>'
 
 
 def stack_html(steps: list[tuple[str, float]]) -> str:
