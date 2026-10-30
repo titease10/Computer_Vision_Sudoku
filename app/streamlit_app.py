@@ -22,6 +22,7 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "app"))
 
 import charts  # noqa: E402
+import extras  # noqa: E402
 
 from sudoku_cv.pipeline import SudokuPipeline, render_solution  # noqa: E402
 from sudoku_cv.solver import count_solutions, is_valid_grid, solve, solve_trace  # noqa: E402
@@ -91,6 +92,7 @@ header[data-testid="stHeader"], footer, #MainMenu, [data-testid="stToolbar"] { d
 [data-testid="stExpander"] { border-radius: 12px; border-color: var(--line); background: var(--card); }
 
 /* étapes cliquables (st.pills) */
+.st-key-extras { position: absolute; width: 0; height: 0; overflow: hidden; }
 [class*="st-key-stepper_"] { margin: .2rem 0 .9rem; }
 [class*="st-key-stepper_"] button { padding: .4rem 1.05rem; font-size: .9rem; transition: transform .15s ease, box-shadow .15s ease; }
 [class*="st-key-stepper_"] button:hover { transform: translateY(-2px); box-shadow: 0 4px 12px var(--shadow); }
@@ -563,6 +565,7 @@ def main() -> None:
         theme = st.segmented_control("Theme", ["Auto", "Light", "Dark"], default="Auto",
                                      label_visibility="collapsed") or "Auto"
     st.html(css_html(theme))
+    extras.install()
     st.html(HERO)
 
     with st.sidebar:
