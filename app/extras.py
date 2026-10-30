@@ -15,6 +15,7 @@ SCRIPT = r"""
 
   const SEQ = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a'];
   const W = 720, H = 460, TAU = Math.PI * 2, MONO = 'ui-monospace,Consolas,monospace';
+  const AI_URL = P.location.protocol + '//' + P.location.hostname + ':__AI_PORT__/classify';
   const START_TIME = 25, MAX_TIME = 30, MISS_COST = 2.5, HIT_GAIN = .5, TOP = 84;
   const FONTS = ['Georgia,serif', 'Arial,Helvetica,sans-serif', '"Courier New",monospace', 'Impact,Haettenschweiler,sans-serif',
     '"Times New Roman",serif', '"Trebuchet MS",sans-serif', 'Verdana,sans-serif', '"Palatino Linotype",serif', '"Comic Sans MS","Comic Neue",cursive'];
@@ -117,7 +118,7 @@ SCRIPT = r"""
   function reset(state) {
     Object.assign(G, { state, t: 0, last: 0, round: 1, score: 0, combo: 0, bestCombo: 0, time: START_TIME, playT: 0, hits: 0, miss: 0, rounds: 0,
       confused: {}, parts: [], floats: [], boxes: [], shake: 0, flash: 0, flashCol: '80,255,150', tiles: [], target: 0, need: 0, total: 0,
-      introT: 0, clearT: 0, roundT: 0, demoT: 0, mistakes: 0, tickAt: 99, newBest: false, rank: 0 });
+      introT: 0, clearT: 0, roundT: 0, demoT: 0, mistakes: 0, tickAt: 99, newBest: false, rank: 0, run: (G.run || 0) + 1, rid: 0, aiRes: {}, truth: {}, hrounds: {}, aiOff: false, roundP0: 0, vs: null, summary: null });
   }
 
   function start() {
@@ -134,6 +135,7 @@ SCRIPT = r"""
     G.rank = list.indexOf(G.score) + 1;
     G.newBest = G.score > before;
     G.floats.length = 0;
+    G.summary = summarize();
     sfx.over();
   }
 
@@ -227,10 +229,57 @@ SCRIPT = r"""
       let d = target;
       if (!isTarget.has(i)) { do { d = Math.random() < similarP ? pickOf(SIMILAR[target]) : 1 + Math.floor(Math.random() * 9); } while (d === target); }
       const rr = Math.floor(i / cols), cc = i % cols;
-      G.tiles.push({ r: rr, c: cc, digit: d, glyph: makeGlyph(d, r), delay: (rr + cc) * .03, found: false, wrong: 0, wobble: 0 });
+      G.tiles.push({ i, r: rr, c: cc, digit: d, glyph: makeGlyph(d, r), delay: (rr + cc) * .03, found: false, wrong: 0, wobble: 0 });
     }
     Object.assign(G, { target, need: k, total: k, rows, cols, s, ox: (W - bw) / 2, oy: TOP + (H - TOP - 10 - bh) / 2, introT: .35 + (rows + cols) * .03,
       clearT: 0, roundT: 0, mistakes: 0 });
+    G.rid++; G.roundP0 = G.playT; G.vs = null;
+    if (G.state === 'play') aiRound();
+  }
+
+  // ---------- le modèle joue en parallèle : il lit les mêmes chiffres, on compare ensuite ----------
+  function cellDataUrl(t) {  // ce que voit le modèle : chiffre foncé sur fond clair, comme les cases d'une grille papier
+    const S = 64, cv = mk(S), x = cv.getContext('2d');
+    x.fillStyle = '#15382f'; x.fillRect(0, 0, S, S); x.drawImage(t.glyph, S * .11, S * .11, S * .78, S * .78);
+    const im = x.getImageData(0, 0, S, S), d = im.data; let sum = 0;
+    for (let k = 0; k < d.length; k += 4) { d[k] = d[k + 1] = d[k + 2] = (d[k] + d[k + 1] + d[k + 2]) / 3; sum += d[k]; }
+    if (sum / (S * S) < 128) for (let k = 0; k < d.length; k += 4) d[k] = d[k + 1] = d[k + 2] = 255 - d[k];
+    x.putImageData(im, 0, 0);
+    return cv.toDataURL('image/png');
+  }
+
+  function aiRound() {
+    const rid = G.rid, run = G.run, t0 = performance.now();
+    G.truth[rid] = { digits: G.tiles.map((t) => t.digit), target: G.target, k: G.total };
+    let images; try { images = G.tiles.map(cellDataUrl); } catch (e) { G.aiOff = true; return; }
+    fetch(AI_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ images }) })
+      .then((r) => { if (!r.ok) throw new Error('http ' + r.status); return r.json(); })
+      .then((j) => { if (G.run === run) G.aiRes[rid] = { rt: performance.now() - t0, infer: j.ms, pred: j.pred, conf: j.conf }; })
+      .catch(() => { if (G.run === run) G.aiOff = true; });
+  }
+
+  function aiMetrics(rid) {
+    const tr = G.truth[rid], res = G.aiRes[rid]; let tp = 0, fp = 0, fn = 0, ok = 0;
+    tr.digits.forEach((d, i) => {
+      const p = res.pred[i]; if (p === d) ok++;
+      if (d === tr.target && p === tr.target) tp++; else if (d !== tr.target && p === tr.target) fp++; else if (d === tr.target) fn++;
+    });
+    return { tp, fp, fn, ok, n: tr.digits.length, k: tr.k };
+  }
+
+  function summarize() {
+    const rids = Object.keys(G.hrounds).map(Number);
+    if (!rids.length) return null;
+    let hT = 0, hHit = 0, hMiss = 0, hFlaw = 0;
+    rids.forEach((rid) => { const h = G.hrounds[rid]; hT += h.time; hHit += h.k; hMiss += h.miss; if (!h.miss) hFlaw++; });
+    const out = { n: rids.length, hTime: hT / rids.length, hPrec: hHit / Math.max(1, hHit + hMiss), hFlaw, ai: null };
+    const ai = rids.filter((rid) => G.aiRes[rid]);
+    if (ai.length) {
+      let rt = 0, inf = 0, tp = 0, fp = 0, fn = 0, flaw = 0;
+      ai.forEach((rid) => { const m = aiMetrics(rid), r = G.aiRes[rid]; rt += r.rt; inf += r.infer; tp += m.tp; fp += m.fp; fn += m.fn; if (!m.fp && !m.fn) flaw++; });
+      out.ai = { n: ai.length, rt: rt / ai.length, infer: inf / ai.length, prec: tp / Math.max(1, tp + fp), rec: tp / Math.max(1, tp + fn), flaw };
+    }
+    return out;
   }
 
   function tileAt(x, y) {
@@ -268,12 +317,21 @@ SCRIPT = r"""
 
   function roundClear() {
     const bonus = 50 + 10 * G.round + (G.mistakes === 0 ? 100 : 0), gain = Math.max(1.5, 4 - .25 * G.round);
-    G.score += bonus; G.rounds++; G.time = Math.min(MAX_TIME, G.time + gain); G.clearT = .6;
+    G.score += bonus; G.rounds++; G.time = Math.min(MAX_TIME, G.time + gain); G.clearT = .9;
     G.floats.push({ x: W / 2, y: H / 2 - 10, text: 'ROUND CLEAR  +' + bonus, col: '124,255,178', life: 1.1, size: 30, vy: -25 });
     if (G.mistakes === 0) G.floats.push({ x: W / 2, y: H / 2 + 22, text: 'FLAWLESS', col: '255,215,90', life: 1.1, size: 20, vy: -25 });
     G.floats.push({ x: W / 2, y: TOP - 4, text: '+' + gain.toFixed(1) + 's', col: '150,215,255', life: 1, size: 18, vy: -20 });
     G.flash = .18; G.flashCol = '80,255,150';
     G.tiles.forEach((t) => { if (t.digit === G.target) burst(G.ox + t.c * G.s + G.s / 2, G.oy + t.r * G.s + G.s / 2, '124,255,178', 6); });
+    G.hrounds[G.rid] = { time: G.playT - G.roundP0, k: G.total, miss: G.mistakes };
+    const res = G.aiRes[G.rid]; G.vs = res || null;
+    if (!G.aiOff) {
+      if (res) {
+        const m = aiMetrics(G.rid), flawless = !m.fp && !m.fn;
+        G.floats.push({ x: W / 2, y: H / 2 + 56, text: 'AI ' + (res.rt / 1000).toFixed(2) + 's · ' + m.tp + '/' + m.k + ' found' + (m.fp ? ' · ' + m.fp + ' false' : ''),
+          col: flawless ? '110,225,255' : '255,150,230', life: 1.2, size: 15, vy: -6 });
+      } else G.floats.push({ x: W / 2, y: H / 2 + 56, text: 'AI still reading...', col: '140,150,145', life: 1.2, size: 15, vy: -6 });
+    }
     sfx.clear();
   }
 
@@ -334,6 +392,15 @@ SCRIPT = r"""
     c.fillStyle = g; c.beginPath(); c.roundRect(-w / 2, -w / 2, w, w, Math.max(5, w * .16)); c.fill(); c.shadowColor = 'transparent';
     c.strokeStyle = t.found ? 'rgba(124,255,178,.7)' : 'hsla(' + hue() + ',60%,60%,' + (hover ? .8 : .22) + ')'; c.lineWidth = 1.4; c.stroke();
     c.globalAlpha = t.found ? .3 : 1; c.drawImage(t.glyph, -w * .5, -w * .5, w, w); c.globalAlpha = 1;
+    if (G.clearT > 0 && G.vs) {  // le verdict du modèle sur cette tuile : cyan = trouvée, rose = fausse alerte, ambre = ratée
+      const pr = G.vs.pred[t.i], isT = t.digit === G.target, say = pr === G.target;
+      if (say || isT) {
+        const col = say && isT ? '110,225,255' : say ? '255,90,220' : '255,190,60';
+        c.save(); c.strokeStyle = 'rgb(' + col + ')'; c.lineWidth = 2.5; c.shadowColor = 'rgb(' + col + ')'; c.shadowBlur = 8; c.setLineDash(say && isT ? [] : [5, 3]);
+        c.beginPath(); c.roundRect(-w / 2 - 2, -w / 2 - 2, w + 4, w + 4, Math.max(6, w * .18)); c.stroke(); c.restore();
+        if (!(say && isT)) { c.fillStyle = 'rgb(' + col + ')'; c.font = 'bold ' + Math.max(9, Math.round(w * .2)) + 'px ' + MONO; c.textAlign = 'center'; c.textBaseline = 'alphabetic'; c.fillText('AI:' + pr, 0, w / 2 - 3); }
+      }
+    }
     if (t.found) {
       c.strokeStyle = 'rgba(150,255,190,.95)'; c.lineWidth = Math.max(2, w * .06); c.lineCap = 'round'; c.lineJoin = 'round';
       c.beginPath(); c.moveTo(-w * .2, w * .02); c.lineTo(-w * .05, w * .17); c.lineTo(w * .22, -w * .14); c.stroke();
@@ -368,7 +435,9 @@ SCRIPT = r"""
     bar.addColorStop(0, low ? '#ff5a5a' : '#37e08a'); bar.addColorStop(1, low ? '#ff9a5a' : '#9dffcf');
     c.save(); if (low) c.globalAlpha = .65 + .35 * Math.sin(now / 90);
     c.fillStyle = bar; c.beginPath(); c.roundRect(bx, 66, Math.max(10, bw * f), 9, 5); c.fill(); c.restore();
-    c.fillStyle = 'rgba(124,255,178,.5)'; c.font = '11px ' + MONO; c.textAlign = 'left'; c.fillText('DIGIT CLASSIFIER · you are the model', 14, H - 4);
+    c.fillStyle = 'rgba(124,255,178,.5)'; c.font = '11px ' + MONO; c.textAlign = 'left'; c.fillText('DIGIT CLASSIFIER · you vs the model', 14, H - 4);
+    const ar = G.aiRes[G.rid];
+    glowText(c, G.aiOff ? 'AI offline' : !ar ? 'AI reading...' : 'AI done in ' + (ar.rt / 1000).toFixed(2) + 's', W - 16, H - 4, 11, G.aiOff ? '140,150,145' : '110,225,255', 'right', 0);
   }
 
   function panel(c, w, h) {
@@ -388,28 +457,46 @@ SCRIPT = r"""
   function drawOverlay(c, now) {
     const pulse = .55 + .45 * Math.sin(now / 280);
     if (G.state === 'ready') {
-      panel(c, 560, 300);
+      panel(c, 580, 340);
       const g = c.createLinearGradient(0, 110, 0, 170); g.addColorStop(0, '#d8ffe9'); g.addColorStop(1, '#41e88a');
-      c.save(); c.font = 'bold 58px ' + MONO; c.textAlign = 'center'; c.shadowColor = 'rgba(60,255,150,.9)'; c.shadowBlur = 24; c.fillStyle = g; c.fillText('DIGIT DASH', W / 2, 165); c.restore();
+      c.save(); c.font = 'bold 58px ' + MONO; c.textAlign = 'center'; c.shadowColor = 'rgba(60,255,150,.9)'; c.shadowBlur = 24; c.fillStyle = g; c.fillText('DIGIT DASH', W / 2, 158); c.restore();
       c.fillStyle = '#b6e8cc'; c.font = '15px ' + MONO; c.textAlign = 'center';
       ['be the classifier: click every digit shown at the top', 'each hit adds time · each miss costs ' + MISS_COST + 's',
-        'seven-segment, dot-matrix, glitched, melted... and look-alikes (6 / 9!)'].forEach((t, i) => c.fillText(t, W / 2, 205 + i * 24));
-      c.fillStyle = 'rgba(255,215,90,' + pulse + ')'; c.font = 'bold 18px ' + MONO; c.fillText('click or press Enter', W / 2, 308);
-      const top = tops(); if (top.length) { c.fillStyle = '#6fbf91'; c.font = '13px ' + MONO; c.fillText('best ' + top[0], W / 2, 332); }
+        'seven-segment, dot-matrix, glitched, melted... and look-alikes (6 / 9!)'].forEach((t, i) => c.fillText(t, W / 2, 196 + i * 24));
+      c.fillStyle = '#7fe0ff'; c.fillText('a real YOLO classifier reads every board too: can you beat it?', W / 2, 272);
+      c.fillStyle = 'rgba(255,215,90,' + pulse + ')'; c.font = 'bold 18px ' + MONO; c.fillText('click or press Enter', W / 2, 314);
+      const top = tops(); if (top.length) { c.fillStyle = '#6fbf91'; c.font = '13px ' + MONO; c.fillText('best ' + top[0], W / 2, 338); }
     } else if (G.state === 'over') {
-      panel(c, 580, 370);
-      glowText(c, "TIME'S UP", W / 2, 118, 34, '255,215,90', 'center', 18);
-      glowText(c, String(G.score), W / 2, 178, 58, '234,255,243', 'center', 18);
-      if (G.newBest) glowText(c, '★ NEW BEST ★', W / 2, 205, 16, '255,215,90', 'center', 10);
-      else if (G.rank > 0) glowText(c, 'top ' + G.rank + ' run', W / 2, 205, 15, '124,255,178', 'center', 6);
+      panel(c, 640, 424);
+      glowText(c, "TIME'S UP", W / 2, 66, 30, '255,215,90', 'center', 18);
+      glowText(c, String(G.score), W / 2, 118, 50, '234,255,243', 'center', 18);
+      if (G.newBest) glowText(c, '★ NEW BEST ★', W / 2, 140, 15, '255,215,90', 'center', 10);
+      else if (G.rank > 0) glowText(c, 'top ' + G.rank + ' run', W / 2, 140, 14, '124,255,178', 'center', 6);
       const tot = G.hits + G.miss, acc = tot ? Math.round(100 * G.hits / tot) : 0;
-      c.fillStyle = '#9fdcb9'; c.font = '14px ' + MONO; c.textAlign = 'center';
-      c.fillText(G.rounds + ' rounds · accuracy ' + acc + '% · best streak ' + G.bestCombo + ' · ' + Math.floor(G.playT) + 's', W / 2, 236);
+      c.fillStyle = '#9fdcb9'; c.font = '13px ' + MONO; c.textAlign = 'center';
+      c.fillText(G.rounds + ' rounds · accuracy ' + acc + '% · best streak ' + G.bestCombo + ' · ' + Math.floor(G.playT) + 's', W / 2, 166);
       const conf = mostConfused();
-      c.fillStyle = conf ? '#ff9a9a' : '#9dffcf'; c.fillText(conf || 'no confusion at all: a perfect classifier', W / 2, 260);
-      c.fillStyle = '#6fbf91'; c.font = '13px ' + MONO;
-      c.fillText(tops().map((v, i) => (i + 1) + '. ' + v).join('   '), W / 2, 292);
-      c.fillStyle = 'rgba(255,215,90,' + pulse + ')'; c.font = 'bold 17px ' + MONO; c.fillText('click or press Enter to retry', W / 2, 336);
+      c.fillStyle = conf ? '#ff9a9a' : '#9dffcf'; c.fillText(conf || 'no confusion at all: a perfect classifier', W / 2, 186);
+      const S = G.summary, pct = (v) => Math.round(100 * v) + '%';
+      c.strokeStyle = 'rgba(120,255,190,.25)'; c.lineWidth = 1; c.beginPath(); c.moveTo(70, 204); c.lineTo(W - 70, 204); c.stroke();
+      if (S && S.ai) {
+        c.font = 'bold 13px ' + MONO; c.fillStyle = '#7CFFB2'; c.fillText('YOU', 400, 226); c.fillStyle = '#7fe0ff'; c.fillText('AI · YOLO11n-cls', 550, 226);
+        const rows = [['speed', S.hTime.toFixed(1) + 's / round', (S.ai.rt / 1000).toFixed(2) + 's / round'], ['precision', pct(S.hPrec), pct(S.ai.prec)],
+          ['recall', '100%', pct(S.ai.rec)], ['flawless rounds', S.hFlaw + ' / ' + S.n, S.ai.flaw + ' / ' + S.ai.n]];
+        rows.forEach(([label, you, ai], i) => {
+          const y = 250 + i * 22; c.font = '13px ' + MONO; c.textAlign = 'left'; c.fillStyle = '#9fdcb9'; c.fillText(label, 90, y);
+          c.textAlign = 'center'; c.fillStyle = '#eafff4'; c.fillText(you, 400, y); c.fillText(ai, 550, y);
+        });
+        const x = S.hTime / (S.ai.rt / 1000), dp = Math.round((S.ai.prec - S.hPrec) * 100);
+        const verdict = 'AI is ' + (x >= 10 ? Math.round(x) : x.toFixed(1)) + 'x faster' + (dp < -2 ? ' but you are ' + (-dp) + ' points more precise' : dp > 2 ? ' and ' + dp + ' points more precise' : ' with the same precision');
+        c.textAlign = 'center'; c.fillStyle = dp < -2 ? '#ffd75a' : '#ff9ad8'; c.font = 'bold 14px ' + MONO; c.fillText(verdict, W / 2, 352);
+      } else {
+        c.textAlign = 'center'; c.fillStyle = '#8b9a93'; c.font = '14px ' + MONO;
+        c.fillText(!S ? 'finish a round to compare yourself with the AI' : G.aiOff ? 'AI offline: no comparison available' : 'the AI had not answered yet', W / 2, 262);
+      }
+      c.textAlign = 'center'; c.fillStyle = '#6fbf91'; c.font = '13px ' + MONO;
+      c.fillText(tops().map((v, i) => (i + 1) + '. ' + v).join('   '), W / 2, 382);
+      c.fillStyle = 'rgba(255,215,90,' + pulse + ')'; c.font = 'bold 17px ' + MONO; c.fillText('click or press Enter to retry', W / 2, 418);
     }
   }
 
@@ -457,7 +544,10 @@ SCRIPT = r"""
 """
 
 
-def install() -> None:
-    """Branche l'extra sur la page. L'iframe est vide et sort du flux : elle ne décale rien."""
+def install(ai_port: int = 8512) -> None:
+    """Branche l'extra sur la page. L'iframe est vide et sort du flux : elle ne décale rien.
+
+    `ai_port` : port du service de classification (classify_service) que le jeu interroge.
+    """
     with st.container(key="extras"):
-        components.html(f"<script>{SCRIPT}</script>", height=0)
+        components.html(f"<script>{SCRIPT.replace('__AI_PORT__', str(ai_port))}</script>", height=0)
