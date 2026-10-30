@@ -41,6 +41,8 @@ h1 { font-size: 2.1rem !important; padding-bottom: 0 !important; }
 .board .found { color: #1B6E3C; }
 .board .doubt { background: #F6E3B4; }
 .board .fixed { background: #F3CDBB; }
+.board .try { background: #CFE3F6; }
+.board .undo { background: #F2B8B5; }
 .legend { font-size: .85rem; color: #6A665C; margin-top: .5rem; }
 .legend b { font-weight: normal; padding: 0 .35em; }
 .legend .l-found { color: #1B6E3C; }
@@ -61,31 +63,42 @@ def to_rgb(image: np.ndarray) -> np.ndarray:
     return cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
 
-def draw_detection(image: np.ndarray, res) -> np.ndarray:
-    """bbox YOLO en bleu, grille suivie (100 intersections) en orange."""
+def draw_detection(image: np.ndarray, res, n_lines: int = 20, with_bbox: bool = True) -> np.ndarray:
+    """bbox YOLO en bleu, grille suivie (100 intersections) en orange.
+
+    `n_lines` limite le nombre de traits dessinés (10 lignes puis 10 colonnes), pour l'animation.
+    """
     out = image.copy()
     thick = max(2, image.shape[1] // 400)
-    if res.bbox is not None:
+    if with_bbox and res.bbox is not None:
         x1, y1, x2, y2 = res.bbox.astype(int)
         cv2.rectangle(out, (x1, y1), (x2, y2), (255, 120, 0), thick)
     if res.points is not None:
         pts = res.points.astype(np.int32)
         for k in range(10):
-            cv2.polylines(out, [np.ascontiguousarray(pts[k, :]).reshape(-1, 1, 2)], False, (0, 140, 255), thick)
-            cv2.polylines(out, [np.ascontiguousarray(pts[:, k]).reshape(-1, 1, 2)], False, (0, 140, 255), thick)
+            if k < n_lines:
+                cv2.polylines(out, [np.ascontiguousarray(pts[k, :]).reshape(-1, 1, 2)], False, (0, 140, 255), thick)
+            if 10 + k < n_lines:
+                cv2.polylines(out, [np.ascontiguousarray(pts[:, k]).reshape(-1, 1, 2)], False, (0, 140, 255), thick)
     return out
 
 
-def board_html(grid: list[list[int]], solution, doubtful: set, fixed: set) -> str:
-    """La grille dessinée : chiffres lus en noir, chiffres trouvés en vert, cases à vérifier surlignées."""
+def board_html(grid: list[list[int]], solution, doubtful: set, fixed: set, marks: dict | None = None) -> str:
+    """La grille dessinée : chiffres lus en noir, chiffres trouvés en vert, cases à vérifier surlignées.
+
+    `marks` ({(ligne, col): classe CSS}) surligne des cases pendant les animations.
+    """
+    marks = marks or {}
     cells = []
     for r in range(9):
         for c in range(9):
-            value = grid[r][c] or (solution[r][c] if solution else "")
+            value = grid[r][c] or (solution[r][c] if solution else 0) or ""
             classes = []
-            if not grid[r][c] and solution:
+            if not grid[r][c] and value:
                 classes.append("found")
-            if (r, c) in fixed:
+            if (r, c) in marks:
+                classes.append(marks[(r, c)])
+            elif (r, c) in fixed:
                 classes.append("fixed")
             elif (r, c) in doubtful:
                 classes.append("doubt")
