@@ -449,8 +449,7 @@ def step_warp(image, res, anim, pause) -> None:
     right.caption("Dewarped grid" + (f" (rotated by {90 * res.rotation}°)." if res.rotation else "."))
 
 
-def step_reading(res, doubtful, fixed, anim, pause) -> None:
-    banner = st.empty()
+def step_reading(res, doubtful, fixed, anim, pause, banner) -> None:
     left, right = st.columns([3, 2], gap="large")
     flat_slot, board_slot = left.empty(), right.empty()
     cell = res.flat.shape[0] / 9
@@ -499,9 +498,9 @@ def step_solving(res, anim, pause) -> dict:
     return {"tries": tries, "undos": undos}
 
 
-def step_result(image, res, anim) -> None:
+def step_result(image, res, anim, banner) -> None:
     solved_photo = render_solution(image, res)
-    show_repair_banner(res.repaired)
+    show_repair_banner(res.repaired, banner)
     left, right = st.columns([3, 2], gap="large")
     left.image(to_rgb(solved_photo), width="stretch")
     right.html(timing_tiles(res, sum(row.count(0) for row in res.grid)))
@@ -526,7 +525,9 @@ def show_steps(image: np.ndarray, res, doubtful: set, fixed: set) -> None:
     # Chaque zone de l'étape est un emplacement réservé, créé d'entrée : Streamlit garde à l'écran les éléments de
     # l'étape précédente, à la même position, tant que la nouvelle ne les a pas remplacés. Créer les emplacements
     # vides en premier efface tout de suite l'ancienne étape, avant le début de l'animation.
-    head_slot, body_slot, info_slot, nav_slot = st.empty(), st.empty(), st.empty(), st.empty()
+    # Le bandeau a le sien, au-dessus du contenu : sinon la lecture, qui en a un, aurait un élément de plus que la
+    # résolution, et cet élément en trop resterait à l'écran pendant l'animation.
+    head_slot, banner_slot, body_slot, info_slot, nav_slot = (st.empty() for _ in range(5))
 
     extra: dict = {}
     title, text = STEPS[step]
@@ -539,11 +540,11 @@ def show_steps(image: np.ndarray, res, doubtful: set, fixed: set) -> None:
         elif step == 1:
             step_warp(image, res, anim, pause)
         elif step == 2:
-            step_reading(res, doubtful, fixed, anim, pause)
+            step_reading(res, doubtful, fixed, anim, pause, banner_slot)
         elif step == 3:
             extra = step_solving(res, anim, pause)
         else:
-            step_result(image, res, anim)
+            step_result(image, res, anim, banner_slot)
     info_slot.html(info_html(step, res, extra))
     st.session_state.played.add(step)
 
