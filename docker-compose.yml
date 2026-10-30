@@ -1,0 +1,27 @@
+# Stack de test : docker compose up --build   ->   http://localhost:8501
+# Tests unitaires : docker compose --profile test run --rm tests
+#
+# Les poids (runs/) ne sont pas versionnés : ils sont montés depuis l'hôte. Le registry MLflow (mlflow.db)
+# n'est pas monté : la source "local" est celle à utiliser dans le conteneur.
+services:
+  app:
+    build: .
+    ports:
+      - "8501:8501"
+    environment:
+      # Source des modèles dans la barre latérale : "local" (poids de runs/) ou "registry"
+      SUDOKU_MODEL_SOURCE: ${SUDOKU_MODEL_SOURCE:-local}
+    volumes:
+      - ./runs:/app/runs:ro
+      - ./src:/app/src:ro   # le code modifié est pris en compte sans rebuild
+      - ./app:/app/app:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8501/_stcore/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  tests:
+    build: .
+    profiles: ["test"]
+    command: ["python", "-m", "pytest", "-q"]
